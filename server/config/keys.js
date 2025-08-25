@@ -4,7 +4,7 @@ module.exports = {
     apiURL: `${process.env.BASE_API_URL}`, // Base API URL
     clientURL: process.env.CLIENT_URL // Client URL
   },
-  port: (process.env.NODE_ENV === 'production' ? 8080 : process.env.PORT) || 3000, // Server port
+  port: process.env.PORT || 3000, // Server port
   database: {
     url: process.env.MONGO_URI // MongoDB connection URL
   },
