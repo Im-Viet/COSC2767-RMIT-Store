@@ -6,7 +6,6 @@ const express = require('express');
 const chalk = require('chalk');
 const cors = require('cors');
 const helmet = require('helmet');
-const path = require('path');
 
 // Import custom modules
 const keys = require('./config/keys');
@@ -43,17 +42,6 @@ require('./config/passport')(app);
 
 // Use the defined routes for handling requests
 app.use(routes);
-
-// Serve static files from the React app build directory in production
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from the client build directory
-  app.use(express.static(path.join(__dirname, '../client/dist')));
-
-  // Catch all handler: send back React's index.html file for any non-API routes
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
-  });
-}
 
 // Start the server and listen on the specified port
 const server = app.listen(port, '0.0.0.0', () => {
