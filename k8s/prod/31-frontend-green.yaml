@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-green
+  namespace: prod
+  labels: { app: frontend, color: green }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: frontend, color: green } }
+  template:
+    metadata:
+      labels: { app: frontend, color: green }
+    spec:
+      containers:
+      - name: frontend
+        image: 293113319402.dkr.ecr.us-east-1.amazonaws.com/rmit-store/frontend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: API_URL
+          valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8080"

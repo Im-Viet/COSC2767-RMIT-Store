@@ -1,0 +1,12 @@
+**/node_modules
+**/.npm
+**/.cache
+.git
+.gitignore
+Dockerfile
+.dockerignore
+**/logs
+**/*.log
+**/.env.local
+**/.env.development
+**/.env.production
