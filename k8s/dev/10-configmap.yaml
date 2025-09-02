@@ -6,7 +6,4 @@ metadata:
 data:
   # Used by client container to generate .env at runtime
   API_URL: "http://backend-svc:3000/api"
-
-  # Optional server app config
-  BASE_API_URL: "api"
   CLIENT_URL: "http://frontend.dev.svc.cluster.local"

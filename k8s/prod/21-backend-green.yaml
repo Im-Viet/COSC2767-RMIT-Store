@@ -20,11 +20,7 @@ spec:
         env:
         - name: PORT
           value: "3000"
-        - name: JWT_SECRET
-          valueFrom: { secretKeyRef: { name: app-secrets, key: JWT_SECRET } }
         - name: MONGO_URI
           valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
-        - name: BASE_API_URL
-          valueFrom: { configMapKeyRef: { name: app-config, key: BASE_API_URL } }
         - name: CLIENT_URL
           valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }

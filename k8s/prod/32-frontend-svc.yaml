@@ -10,5 +10,5 @@ spec:
     app: frontend
     color: blue   # << flip to 'green' to promote
   ports:
-  - port: 80
+  - port: 8080
     targetPort: 8080
