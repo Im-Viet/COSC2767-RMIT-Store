@@ -3,12 +3,17 @@ kind: Ingress
 metadata:
   name: app-ingress
   namespace: prod
-  annotations: {}
 spec:
   ingressClassName: nginx
   rules:
   - http:
       paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-svc
+            port: { number: 3000 }
       - path: /
         pathType: Prefix
         backend:

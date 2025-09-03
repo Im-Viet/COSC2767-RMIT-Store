@@ -4,5 +4,5 @@ metadata:
   name: app-config
   namespace: prod
 data:
-  API_URL: "http://backend-svc:3000/api"
+  API_URL: "/api"                       # ⬅️ CHANGED from http://backend-svc:3000/api
   CLIENT_URL: "http://frontend.prod.svc.cluster.local"
