@@ -11,7 +11,8 @@ COPY client/ ./
 
 # API URL is consumed by dotenv-webpack at dev-server start.
 # We write .env dynamically from the container env (API_URL)
-ENV API_URL=/api
+ARG API_URL=/api
+RUN sed -i "s|^API_URL=.*|API_URL=${API_URL}|" .env || echo "API_URL=${API_URL}" >> .env
 
 # Helper entrypoint writes .env then launches webpack-dev-server
 COPY client/docker-entrypoint.sh /usr/local/bin/entry.sh
