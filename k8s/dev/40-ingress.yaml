@@ -3,15 +3,20 @@ kind: Ingress
 metadata:
   name: app-ingress
   namespace: dev
-  annotations: {}
 spec:
   ingressClassName: nginx
   rules:
   - http:
       paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-svc      # ⬅️ sends /api to backend
+            port: { number: 3000 }
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: frontend-svc
+            name: frontend-svc     # ⬅️ everything else to frontend
             port: { number: 8080 }
