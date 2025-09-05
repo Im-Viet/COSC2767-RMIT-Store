@@ -14,6 +14,8 @@ pipeline {
     string(name: 'K8S_NAMESPACE', defaultValue: 'dev',       description: 'Kubernetes namespace')
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
     booleanParam(name: 'SEED_DB',        defaultValue: false, description: 'Run seed job after deploy')
+    string(name: 'BACKEND_REPO', defaultValue: 'rmit-store/backend', description: 'Backend repository')
+    string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'Frontend repository')
     // Use Jenkins Credentials instead of plain strings:
     // Create a Jenkins credential ID "seed-admin" (Username = admin email, Password = admin password)
   }
@@ -22,6 +24,8 @@ pipeline {
     REGION = "${params.AWS_REGION}"
     CLUSTER = "${params.EKS_CLUSTER}"
     NAMESPACE = "${params.K8S_NAMESPACE}"
+    BACKEND_REPO = "${params.BACKEND_REPO}"
+    FRONTEND_REPO = "${params.FRONTEND_REPO}"
     DOCKER_BUILDKIT = "1"
   }
 
@@ -46,6 +50,46 @@ pipeline {
         sh '''
           aws ecr get-login-password --region "$REGION" | \
             docker login --username AWS --password-stdin "$ECR"
+        '''
+      }
+    }
+
+    stage('Ensure ECR repositories') {
+      steps {
+        sh '''
+          set -euo pipefail
+
+          ensure_repo () {
+            local repo="$1"
+            if aws ecr describe-repositories --region "$REGION" --repository-names "$repo" >/dev/null 2>&1; then
+              echo "ECR repo $repo already exists"
+            else
+              echo "Creating ECR repo: $repo"
+              aws ecr create-repository \
+                --region "$REGION" \
+                --repository-name "$repo" \
+                --image-scanning-configuration scanOnPush=true \
+                --encryption-configuration encryptionType=AES256
+
+              # Optional: keep only the last 6 images (best-effort; ignore if denied)
+              aws ecr put-lifecycle-policy \
+                --region "$REGION" \
+                --repository-name "$repo" \
+                --lifecycle-policy-text '{
+                  "rules": [
+                    {
+                      "rulePriority": 1,
+                      "description": "Keep last 6 images",
+                      "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 6 },
+                      "action": { "type": "expire" }
+                    }
+                  ]
+                }' || true
+            fi
+          }
+
+          ensure_repo "$BACKEND_REPO"
+          ensure_repo "$FRONTEND_REPO"
         '''
       }
     }
