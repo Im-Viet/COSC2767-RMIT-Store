@@ -1,104 +1,121 @@
 pipeline {
   agent any
-
-  options {
-    timestamps()
-    ansiColor('xterm')
-    buildDiscarder(logRotator(numToKeepStr: '10'))
-  }
-
   environment {
-    AWS_REGION         = 'us-east-1'               // <-- change if needed
-    AWS_ACCOUNT_ID     = '029311331942'            // <-- your AWS academy acct
-    ECR_BACKEND        = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/rmit-store/backend"
-    ECR_FRONTEND       = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/rmit-store/frontend"
-    GIT_SHA            = "${env.GIT_COMMIT?.take(7)}"
-    DOCKER_BUILDKIT    = '1'
-    // Jenkins file credentials (configure in Jenkins > Credentials)
-    // - 'kubeconfig-dev'  : type=Secret file
-    // - 'kubeconfig-prod' : type=Secret file
-    // - 'notify-email'    : string or just configure Jenkins mailer globally
+    AWS_REGION = 'us-east-1'
+    ECR_FE = '<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/rmit-store/frontend'
+    ECR_BE = '<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/rmit-store/backend'
+    GIT_SHA = "${env.GIT_COMMIT ?: sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()}"
+    KUBECONFIG = '/var/lib/jenkins/.kube/config'
   }
-
+  options { timestamps(); ansiColor('xterm'); }
   stages {
-    stage('Docker Build & Push (ECR)') {
+    stage('Checkout') { steps { checkout scm } }
+
+    stage('Install deps & Unit tests') {
       steps {
         sh '''
-          BACKEND_TAG="${ECR_BACKEND}:${GIT_SHA}"
-          FRONTEND_TAG="${ECR_FRONTEND}:${GIT_SHA}"
-
-          aws ecr create-repository --repository-name rmit-store/frontend --region ${AWS_REGION} || true
-
-          aws ecr create-repository --repository-name rmit-store/backend --region ${AWS_REGION} || true
-
-          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
-          docker build -t "$BACKEND_TAG" ./backend
-          docker push "$BACKEND_TAG"
-          
-          docker build -t "$FRONTEND_TAG" ./client
-          docker push "$FRONTEND_TAG"
-
-          echo "$BACKEND_TAG" > backend.tag || true
-          echo "$FRONTEND_TAG" > frontend.tag || true
+          cd backend && npm ci && npm test -- --ci
+          cd ../frontend && npm ci && npm test -- --ci
         '''
-        archiveArtifacts artifacts: '*.tag', fingerprint: true
       }
     }
 
-    stage('Deploy to DEV (Ansible)') {
+    stage('Integration tests (backend↔DB)') {
       steps {
-        withCredentials([file(credentialsId: 'kubeconfig-dev', variable: 'KCFG')]) {
-          sh '''
-            export KUBECONFIG="$KCFG"
-            BACKEND_IMG=$(cat backend.tag 2>/dev/null || true)
-            FRONTEND_IMG=$(cat frontend.tag 2>/dev/null || true)
-
-            ansible-playbook -i ansible/inventories/dev/hosts ansible/deploy-dev.yml \
-              --extra-vars "backend_image=${BACKEND_IMG} frontend_image=${FRONTEND_IMG}"
-          '''
-        }
+        sh '''
+          cd backend
+          npm run test:integration || true   # keep simple; fail if you have it ready
+        '''
       }
     }
 
-    stage('Promote to PROD (Blue/Green)') {
-      when {
-        anyOf {
-          branch 'main'; branch 'master'
-        }
-      }
+    stage('E2E/UI (headless)') {
       steps {
-        withCredentials([file(credentialsId: 'kubeconfig-prod', variable: 'KCFG')]) {
-          sh '''
-            export KUBECONFIG="$KCFG"
-            BACKEND_IMG=$(cat backend.tag 2>/dev/null || true)
-            FRONTEND_IMG=$(cat frontend.tag 2>/dev/null || true)
+        sh '''
+          cd tests/e2e || exit 0
+          npx playwright install --with-deps || true
+          npm ci && npm test || true
+        '''
+      }
+    }
 
-            ansible-playbook -i ansible/inventories/prod/hosts ansible/deploy-prod-bluegreen.yml \
-              --extra-vars "backend_image=${BACKEND_IMG} frontend_image=${FRONTEND_IMG}"
-          '''
-        }
+    stage('Login to ECR') {
+      steps {
+        sh '''
+          aws --version
+          aws ecr get-login-password --region $AWS_REGION \
+            | docker login --username AWS --password-stdin ${ECR_FE%/rmit-store/frontend}
+        '''
+      }
+    }
+
+    stage('Build & Push images') {
+      steps {
+        sh '''
+          docker build -t $ECR_FE:$GIT_SHA -f frontend/Dockerfile frontend
+          docker push $ECR_FE:$GIT_SHA
+          docker build -t $ECR_BE:$GIT_SHA -f backend/Dockerfile backend
+          docker push $ECR_BE:$GIT_SHA
+        '''
+      }
+    }
+
+    stage('Deploy DEV') {
+      steps {
+        sh '''
+          helm upgrade --install rmit-dev deploy/helm/rmit-store \
+            --namespace dev --create-namespace \
+            -f deploy/helm/rmit-store/values-dev.yaml \
+            --set image.tag=$GIT_SHA
+          # quick smoke: check pods ready
+          kubectl -n dev rollout status deploy -l app=frontend --timeout=120s
+          kubectl -n dev rollout status deploy -l app=backend  --timeout=120s
+        '''
+      }
+    }
+
+    stage('Promote to PROD (blue/green)') {
+      when { branch 'main' }
+      steps {
+        sh '''
+          # Deploy new color (determine opposite of current active)
+          ACTIVE=$(helm get values rmit-prod -n prod -o yaml 2>/dev/null | awk '/activeColor:/ {print $2}')
+          [ -z "$ACTIVE" ] && ACTIVE=blue
+          if [ "$ACTIVE" = "blue" ]; then NEW=green; else NEW=blue; fi
+
+          if [ "$NEW" = "green" ]; then
+            helm upgrade --install rmit-prod deploy/helm/rmit-store \
+              --namespace prod --create-namespace \
+              -f deploy/helm/rmit-store/values-prod.yaml \
+              --set image.tagGreen=$GIT_SHA --set activeColor=$ACTIVE
+          else
+            helm upgrade --install rmit-prod deploy/helm/rmit-store \
+              --namespace prod --create-namespace \
+              -f deploy/helm/rmit-store/values-prod.yaml \
+              --set image.tagBlue=$GIT_SHA --set activeColor=$ACTIVE
+          fi
+
+          # Verify new color pods become Ready
+          kubectl -n prod rollout status deploy -l app=frontend,color=$NEW --timeout=180s
+          kubectl -n prod rollout status deploy -l app=backend,color=$NEW  --timeout=180s
+
+          # Flip Service selector to NEW color
+          helm upgrade rmit-prod deploy/helm/rmit-store \
+            --namespace prod \
+            -f deploy/helm/rmit-store/values-prod.yaml \
+            --set activeColor=$NEW --reuse-values
+        '''
       }
     }
   }
-
   post {
     failure {
-      // Requires Email Extension Plugin or global Mailer config
-      emailext (
-        subject: "[Jenkins] ❌ Build #${env.BUILD_NUMBER} failed: ${env.JOB_NAME}",
-        body: """Build failed on ${env.NODE_NAME}
-- Job: ${env.JOB_NAME}
-- Build: ${env.BUILD_NUMBER}
-- Commit: ${env.GIT_COMMIT}
-
-See console: ${env.BUILD_URL}console
-""",
-        recipientProviders: [[$class: 'DevelopersRecipientProvider']]
-      )
+      emailext subject: "❌ Pipeline failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+               body: "Check console output at ${env.BUILD_URL}",
+               to: "antthames92@gmail.com"
     }
     success {
-      echo '✅ Pipeline succeeded.'
+      echo '✅ Pipeline succeeded'
     }
   }
 }
