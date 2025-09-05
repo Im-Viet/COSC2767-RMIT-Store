@@ -160,45 +160,38 @@ pipeline {
       }
     }
 
-    stage('Seed database (optional, no exec)') {
+    stage('Seed database (from file)') {
       when { expression { return params.SEED_DB } }
       steps {
-        // Use Jenkins credentials 'seed-admin' to avoid hardcoding secrets
-        withCredentials([usernamePassword(credentialsId: 'seed-admin', usernameVariable: 'SEED_ADMIN_EMAIL', passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
+        withCredentials([usernamePassword(credentialsId: 'seed-admin',
+                                          usernameVariable: 'SEED_ADMIN_EMAIL',
+                                          passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
           sh '''
-cat <<'YAML' | kubectl apply -f -
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: seed-db-${BUILD_NUMBER}
-  namespace: $NAMESPACE
-spec:
-  backoffLimit: 0
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-      - name: seed
-        image: ${BACKEND_IMAGE}
-        command: ["sh","-lc"]
-        args: ["npm run seed:db -- ${SEED_ADMIN_EMAIL} ${SEED_ADMIN_PASSWORD}"]
-        env:
-        - name: PORT
-          value: "3000"
-        - name: BASE_API_URL
-          value: "api"
-        - name: MONGO_URI
-          valueFrom:
-            secretKeyRef:
-              name: app-secrets
-              key: MONGO_URI
-YAML
-kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db-${BUILD_NUMBER} --timeout=180s || true
-kubectl -n "$NAMESPACE" delete job/seed-db-${BUILD_NUMBER} --ignore-not-found=true
+            set -euo pipefail
+
+            # Clean previous run (if any)
+            kubectl -n "$NAMESPACE" delete job/seed-db --ignore-not-found=true
+
+            # Create/refresh a temporary Secret with admin creds
+            kubectl -n "$NAMESPACE" create secret generic seed-admin \
+              --from-literal=email="$SEED_ADMIN_EMAIL" \
+              --from-literal=password="$SEED_ADMIN_PASSWORD" \
+              --dry-run=client -o yaml | kubectl apply -f -
+
+            # Substitute image into the checked-in Job file and apply it
+            sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/dev/jobs/seed-db.yaml \
+              | kubectl -n "$NAMESPACE" apply -f -
+
+            # Wait for the Job to finish (don’t fail the whole pipeline if it times out)
+            kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db --timeout=180s || true
+
+            # Optional: keep or delete the secret; delete means creds won’t linger in the cluster
+            kubectl -n "$NAMESPACE" delete secret seed-admin --ignore-not-found=true
           '''
         }
       }
     }
+
 
     stage('Show endpoints') {
       steps {
