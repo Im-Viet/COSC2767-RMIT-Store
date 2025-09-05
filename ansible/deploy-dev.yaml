@@ -1,0 +1,8 @@
+---
+- hosts: dev
+  gather_facts: false
+  vars:
+    backend_image: ""
+    frontend_image: ""
+  roles:
+    - kube_deploy

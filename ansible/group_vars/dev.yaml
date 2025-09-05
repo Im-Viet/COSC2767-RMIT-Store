@@ -1,0 +1,9 @@
+namespace: dev
+frontend_deploy_name: frontend
+backend_deploy_name: backend
+frontend_container: frontend
+backend_container: backend
+service_name_frontend: frontend-svc
+service_name_backend: backend-svc
+color_a: blue
+color_b: green

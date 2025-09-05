@@ -1,0 +1,18 @@
+---
+- name: Update backend image if provided
+  when: backend_image | length > 0
+  shell: |
+    kubectl -n {{ namespace }} set image deploy/{{ backend_deploy_name }} {{ backend_container }}={{ backend_image }} --record
+- name: Wait for backend rollout
+  when: backend_image | length > 0
+  shell: |
+    kubectl -n {{ namespace }} rollout status deploy/{{ backend_deploy_name }} --timeout=120s
+
+- name: Update frontend image if provided
+  when: frontend_image | length > 0
+  shell: |
+    kubectl -n {{ namespace }} set image deploy/{{ frontend_deploy_name }} {{ frontend_container }}={{ frontend_image }} --record
+- name: Wait for frontend rollout
+  when: frontend_image | length > 0
+  shell: |
+    kubectl -n {{ namespace }} rollout status deploy/{{ frontend_deploy_name }} --timeout=120s

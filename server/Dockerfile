@@ -17,8 +17,5 @@ ENV PORT=3000
 # Expose backend port
 EXPOSE 3000
 
-# Run as non-root
-USER node
-
 # Start dev server (nodemon)
 CMD ["npm", "run", "dev"]
