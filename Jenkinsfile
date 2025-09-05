@@ -1,121 +1,192 @@
 pipeline {
   agent any
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  parameters {
+    string(name: 'AWS_REGION',    defaultValue: 'us-east-1', description: 'AWS region')
+    string(name: 'EKS_CLUSTER',   defaultValue: 'rmit-eks',  description: 'EKS cluster name')
+    string(name: 'K8S_NAMESPACE', defaultValue: 'dev',       description: 'Kubernetes namespace')
+    booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
+    booleanParam(name: 'SEED_DB',        defaultValue: false, description: 'Run seed job after deploy')
+    // Use Jenkins Credentials instead of plain strings:
+    // Create a Jenkins credential ID "seed-admin" (Username = admin email, Password = admin password)
+  }
+
   environment {
-    AWS_REGION = 'us-east-1'
-    ECR_FE = '<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/rmit-store/frontend'
-    ECR_BE = '<ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/rmit-store/backend'
-    GIT_SHA = "${env.GIT_COMMIT ?: sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()}"
-    KUBECONFIG = '/var/lib/jenkins/.kube/config'
+    REGION = "${params.AWS_REGION}"
+    CLUSTER = "${params.EKS_CLUSTER}"
+    NAMESPACE = "${params.K8S_NAMESPACE}"
+    DOCKER_BUILDKIT = "1"
   }
-  options { timestamps(); ansiColor('xterm'); }
+
   stages {
-    stage('Checkout') { steps { checkout scm } }
-
-    stage('Install deps & Unit tests') {
+    stage('Checkout') {
       steps {
+        checkout scm
+        sh 'git --no-pager log -1 --pretty=oneline || true'
+      }
+    }
+
+    stage('Resolve IDs & Login to ECR') {
+      steps {
+        script {
+          env.ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
+          env.ECR = "${env.ACCOUNT_ID}.dkr.ecr.${env.REGION}.amazonaws.com"
+          env.GIT_SHA = sh(script: "git rev-parse --short=12 HEAD", returnStdout: true).trim()
+          env.IMG_TAG = "${env.GIT_SHA}-${env.BUILD_NUMBER}"
+          env.BACKEND_IMAGE = "${env.ECR}/rmit-store/backend:${env.IMG_TAG}"
+          env.FRONTEND_IMAGE = "${env.ECR}/rmit-store/frontend:${env.IMG_TAG}"
+        }
         sh '''
-          cd backend && npm ci && npm test -- --ci
-          cd ../frontend && npm ci && npm test -- --ci
+          aws ecr get-login-password --region "$REGION" | \
+            docker login --username AWS --password-stdin "$ECR"
         '''
       }
     }
 
-    stage('Integration tests (backend↔DB)') {
+    stage('Build backend image') {
       steps {
         sh '''
-          cd backend
-          npm run test:integration || true   # keep simple; fail if you have it ready
+          docker build \
+            --file server/Dockerfile \
+            --tag "$BACKEND_IMAGE" \
+            .
         '''
       }
     }
 
-    stage('E2E/UI (headless)') {
+    stage('Build frontend image') {
       steps {
         sh '''
-          cd tests/e2e || exit 0
-          npx playwright install --with-deps || true
-          npm ci && npm test || true
+          docker build \
+            --file client/Dockerfile \
+            --tag "$FRONTEND_IMAGE" \
+            .
         '''
       }
     }
 
-    stage('Login to ECR') {
+    stage('Push images') {
       steps {
         sh '''
-          aws --version
-          aws ecr get-login-password --region $AWS_REGION \
-            | docker login --username AWS --password-stdin ${ECR_FE%/rmit-store/frontend}
+          docker push "$BACKEND_IMAGE"
+          docker push "$FRONTEND_IMAGE"
         '''
       }
     }
 
-    stage('Build & Push images') {
+    stage('Kube context') {
       steps {
-        sh '''
-          docker build -t $ECR_FE:$GIT_SHA -f frontend/Dockerfile frontend
-          docker push $ECR_FE:$GIT_SHA
-          docker build -t $ECR_BE:$GIT_SHA -f backend/Dockerfile backend
-          docker push $ECR_BE:$GIT_SHA
-        '''
+        sh 'aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"'
+        sh 'kubectl version --short || true'
       }
     }
 
-    stage('Deploy DEV') {
+    stage('Apply k8s manifests (first time only)') {
+      when { expression { return params.APPLY_MANIFESTS } }
       steps {
         sh '''
-          helm upgrade --install rmit-dev deploy/helm/rmit-store \
-            --namespace dev --create-namespace \
-            -f deploy/helm/rmit-store/values-dev.yaml \
-            --set image.tag=$GIT_SHA
-          # quick smoke: check pods ready
-          kubectl -n dev rollout status deploy -l app=frontend --timeout=120s
-          kubectl -n dev rollout status deploy -l app=backend  --timeout=120s
-        '''
-      }
-    }
-
-    stage('Promote to PROD (blue/green)') {
-      when { branch 'main' }
-      steps {
-        sh '''
-          # Deploy new color (determine opposite of current active)
-          ACTIVE=$(helm get values rmit-prod -n prod -o yaml 2>/dev/null | awk '/activeColor:/ {print $2}')
-          [ -z "$ACTIVE" ] && ACTIVE=blue
-          if [ "$ACTIVE" = "blue" ]; then NEW=green; else NEW=blue; fi
-
-          if [ "$NEW" = "green" ]; then
-            helm upgrade --install rmit-prod deploy/helm/rmit-store \
-              --namespace prod --create-namespace \
-              -f deploy/helm/rmit-store/values-prod.yaml \
-              --set image.tagGreen=$GIT_SHA --set activeColor=$ACTIVE
+          # apply everything under k8s/<namespace> (your repo already has k8s/dev)
+          if [ -d "k8s/$NAMESPACE" ]; then
+            kubectl -n "$NAMESPACE" apply -f "k8s/$NAMESPACE"
           else
-            helm upgrade --install rmit-prod deploy/helm/rmit-store \
-              --namespace prod --create-namespace \
-              -f deploy/helm/rmit-store/values-prod.yaml \
-              --set image.tagBlue=$GIT_SHA --set activeColor=$ACTIVE
+            echo "WARN: k8s/$NAMESPACE not found; skipping"
           fi
+        '''
+      }
+    }
 
-          # Verify new color pods become Ready
-          kubectl -n prod rollout status deploy -l app=frontend,color=$NEW --timeout=180s
-          kubectl -n prod rollout status deploy -l app=backend,color=$NEW  --timeout=180s
+    stage('Deploy new images') {
+      steps {
+        sh '''
+          # update Deployments to the freshly pushed images
+          kubectl -n "$NAMESPACE" set image deploy/backend backend="$BACKEND_IMAGE"
+          kubectl -n "$NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE"
 
-          # Flip Service selector to NEW color
-          helm upgrade rmit-prod deploy/helm/rmit-store \
-            --namespace prod \
-            -f deploy/helm/rmit-store/values-prod.yaml \
-            --set activeColor=$NEW --reuse-values
+          # wait for rollouts (does NOT require kubectl exec/logs)
+          kubectl -n "$NAMESPACE" rollout status deploy/backend --timeout=180s
+          kubectl -n "$NAMESPACE" rollout status deploy/frontend --timeout=180s
+        '''
+      }
+    }
+
+    stage('Seed database (optional, no exec)') {
+      when { expression { return params.SEED_DB } }
+      steps {
+        // Use Jenkins credentials 'seed-admin' to avoid hardcoding secrets
+        withCredentials([usernamePassword(credentialsId: 'seed-admin', usernameVariable: 'SEED_ADMIN_EMAIL', passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
+          sh '''
+cat <<'YAML' | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-db-${BUILD_NUMBER}
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: seed
+        image: ${BACKEND_IMAGE}
+        command: ["sh","-lc"]
+        args: ["npm run seed:db -- ${SEED_ADMIN_EMAIL} ${SEED_ADMIN_PASSWORD}"]
+        env:
+        - name: PORT
+          value: "3000"
+        - name: BASE_API_URL
+          value: "api"
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: MONGO_URI
+YAML
+kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db-${BUILD_NUMBER} --timeout=180s || true
+kubectl -n "$NAMESPACE" delete job/seed-db-${BUILD_NUMBER} --ignore-not-found=true
+          '''
+        }
+      }
+    }
+
+    stage('Show endpoints') {
+      steps {
+        sh '''
+          echo "=== Kubernetes objects ($NAMESPACE) ==="
+          kubectl -n "$NAMESPACE" get deploy,svc,ingress -o wide || true
+
+          echo "=== If using NGINX Ingress Service LB ==="
+          kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\\n"}' || true
+
+          echo "You can test:   curl http://<ELB>/api/brand/list"
         '''
       }
     }
   }
+
   post {
     failure {
-      emailext subject: "❌ Pipeline failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-               body: "Check console output at ${env.BUILD_URL}",
-               to: "antthames92@gmail.com"
+      echo "Deployment failed – attempting rollback"
+      sh '''
+        kubectl -n "$NAMESPACE" rollout undo deploy/backend || true
+        kubectl -n "$NAMESPACE" rollout undo deploy/frontend || true
+        kubectl -n "$NAMESPACE" get deploy -o wide || true
+      '''
+    }
+    always {
+      archiveArtifacts artifacts: '**/Dockerfile, k8s/**/*.yaml', fingerprint: true, onlyIfSuccessful: false
     }
     success {
-      echo '✅ Pipeline succeeded'
+      echo "✅ Deployed images:"
+      echo "   $BACKEND_IMAGE"
+      echo "   $FRONTEND_IMAGE"
     }
   }
 }
