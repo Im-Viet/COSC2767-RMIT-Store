@@ -128,7 +128,7 @@ pipeline {
     stage('Kube context') {
       steps {
         sh 'aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"'
-        sh 'kubectl version --short || true'
+        sh 'kubectl version --client --output=yaml || true'
       }
     }
 
@@ -171,7 +171,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: seed-db-${BUILD_NUMBER}
-  namespace: ${NAMESPACE}
+  namespace: $NAMESPACE
 spec:
   backoffLimit: 0
   template:
