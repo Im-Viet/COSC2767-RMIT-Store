@@ -26,7 +26,6 @@ pipeline {
     NAMESPACE = "${params.K8S_NAMESPACE}"
     BACKEND_REPO = "${params.BACKEND_REPO}"
     FRONTEND_REPO = "${params.FRONTEND_REPO}"
-    DEV_BASE_URL = credentials('DEV_BASE_URL')
     DOCKER_BUILDKIT = "1"
   }
 
@@ -263,13 +262,7 @@ pipeline {
           '''
         }
       }
-      post {
-        always {
-          archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true
-        }
-      }
     }
-
 
     stage('Show endpoints') {
       steps {
