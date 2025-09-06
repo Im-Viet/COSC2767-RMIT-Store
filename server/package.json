@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "nodemon",
     "start": "cross-env NODE_ENV=production node index.js",
-    "seed:db": "node utils/seed.js"
+    "seed:db": "node utils/seed.js",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "@faker-js/faker": "^9.9.0",
