@@ -5,7 +5,7 @@ pipeline {
     timestamps()
     ansiColor('xterm')
     disableConcurrentBuilds()
-    buildDiscarder(logRotator(numToKeepStr: '20'))
+    buildDiscarder(logRotator(numToKeepStr: '10'))
   }
 
   parameters {
@@ -30,13 +30,6 @@ pipeline {
   }
 
   stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-        sh 'git --no-pager log -1 --pretty=oneline || true'
-      }
-    }
-
     stage('Resolve IDs & Login to ECR') {
       steps {
         script {
@@ -71,7 +64,7 @@ pipeline {
                 --image-scanning-configuration scanOnPush=true \
                 --encryption-configuration encryptionType=AES256
 
-              # Optional: keep only the last 6 images (best-effort; ignore if denied)
+              # Optional: keep only the last 10 images (best-effort; ignore if denied)
               aws ecr put-lifecycle-policy \
                 --region "$REGION" \
                 --repository-name "$repo" \
@@ -79,8 +72,8 @@ pipeline {
                   "rules": [
                     {
                       "rulePriority": 1,
-                      "description": "Keep last 6 images",
-                      "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 6 },
+                      "description": "Keep last 10 images",
+                      "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10 },
                       "action": { "type": "expire" }
                     }
                   ]
