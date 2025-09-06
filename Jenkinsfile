@@ -90,10 +90,7 @@ pipeline {
     stage('Build backend image') {
       steps {
         sh '''
-          docker build \
-            --file server/Dockerfile \
-            --tag "$BACKEND_IMAGE" \
-            .
+          docker build --no-cache -f server/Dockerfile -t "$BACKEND_IMAGE" .
         '''
       }
     }
@@ -101,10 +98,7 @@ pipeline {
     stage('Build frontend image') {
       steps {
         sh '''
-          docker build \
-            --file client/Dockerfile \
-            --tag "$FRONTEND_IMAGE" \
-            .
+          docker build --no-cache -f client/Dockerfile -t "$FRONTEND_IMAGE" .
         '''
       }
     }
