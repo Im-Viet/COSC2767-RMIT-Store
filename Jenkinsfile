@@ -128,6 +128,20 @@ pipeline {
       }
     }
 
+    stage('Backend: Unit + Integration tests') {
+      agent { docker { image 'node:22' } }
+      steps {
+        dir('server') {
+          // one-time devDeps if not committed
+          sh 'npm i -D jest supertest mongodb-memory-server'
+          sh 'npx jest --runInBand'
+        }
+      }
+      post {
+        always { junit allowEmptyResults: true, testResults: 'server/junit.xml' }
+      }
+    }
+
     stage('Apply k8s manifests (first time only)') {
       when { expression { return params.APPLY_MANIFESTS } }
       steps {
@@ -188,34 +202,6 @@ pipeline {
       }
     }
 
-    stage('Backend: Unit + Integration tests') {
-      agent { docker { image 'node:22' } }
-      steps {
-        dir('server') {
-          // one-time devDeps if not committed
-          sh 'npm i -D jest supertest mongodb-memory-server'
-          sh 'npx jest --runInBand'
-        }
-      }
-      post {
-        always { junit allowEmptyResults: true, testResults: 'server/junit.xml' }
-      }
-    }
-
-    stage('Deploy to Dev') {
-      // your existing deploy-to-dev steps (kubectl apply / helm, etc.)
-      steps {
-        echo 'Deploying to dev...'
-      }
-    }
-
-    stage('Smoke: API (Dev)') {
-      agent { docker { image 'stedolan/jq' } } // or node:18 and apt-get jq
-      steps {
-        sh 'bash scripts/smoke-dev.sh'
-      }
-    }
-
     stage('Web UI E2E (Playwright)') {
       agent { docker { image 'mcr.microsoft.com/playwright:v1.47.0-jammy' } }
       environment {
@@ -224,7 +210,6 @@ pipeline {
         E2E_PASSWORD = "${env.E2E_PASSWORD}"
       }
       steps {
-        sh 'npm i -D @playwright/test'
         sh 'npx playwright install --with-deps'
         sh 'npx playwright test --reporter=html'
       }
