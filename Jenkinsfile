@@ -85,11 +85,11 @@ pipeline {
     }
 
     stage('Build backend image') {
-      steps { sh 'docker build --no-cache -f server/Dockerfile -t "$BACKEND_IMAGE" .' }
+      steps { sh 'docker build -f server/Dockerfile -t "$BACKEND_IMAGE" .' }
     }
 
     stage('Build frontend image') {
-      steps { sh 'docker build --no-cache -f client/Dockerfile -t "$FRONTEND_IMAGE" .' }
+      steps { sh 'docker build -f client/Dockerfile -t "$FRONTEND_IMAGE" .' }
     }
 
     stage('Push images') {
