@@ -1,0 +1,13 @@
+const { test, expect } = require('@playwright/test');
+
+test('User can login and is redirected to dashboard', async ({ page }) => {
+  await page.goto('/login');
+
+  await page.locator('input[name="email"]').fill(process.env.E2E_EMAIL || 'admin@example.com');
+  await page.locator('input[name="password"]').fill(process.env.E2E_PASSWORD || 'P@ssw0rd!');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+
+  // This app redirects authenticated users to /dashboard
+  await page.waitForURL('**/dashboard', { timeout: 15000 });
+  await expect(page).toHaveURL(/\/dashboard$/);
+});

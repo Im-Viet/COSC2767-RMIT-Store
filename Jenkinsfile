@@ -26,6 +26,10 @@ pipeline {
     NAMESPACE = "${params.K8S_NAMESPACE}"
     BACKEND_REPO = "${params.BACKEND_REPO}"
     FRONTEND_REPO = "${params.FRONTEND_REPO}"
+    DEV_BASE_URL = credentials('DEV_BASE_URL')
+    E2E_BASE_URL = "${DEV_BASE_URL}"
+    E2E_EMAIL    = credentials('E2E_EMAIL')
+    E2E_PASSWORD = credentials('E2E_PASSWORD')
     DOCKER_BUILDKIT = "1"
   }
 
@@ -184,6 +188,52 @@ pipeline {
       }
     }
 
+    stage('Backend: Unit + Integration tests') {
+      agent { docker { image 'node:22' } }
+      steps {
+        dir('server') {
+          // one-time devDeps if not committed
+          sh 'npm i -D jest supertest mongodb-memory-server'
+          sh 'npx jest --runInBand'
+        }
+      }
+      post {
+        always { junit allowEmptyResults: true, testResults: 'server/junit.xml' }
+      }
+    }
+
+    stage('Deploy to Dev') {
+      // your existing deploy-to-dev steps (kubectl apply / helm, etc.)
+      steps {
+        echo 'Deploying to dev...'
+      }
+    }
+
+    stage('Smoke: API (Dev)') {
+      agent { docker { image 'stedolan/jq' } } // or node:18 and apt-get jq
+      steps {
+        sh 'bash scripts/smoke-dev.sh'
+      }
+    }
+
+    stage('Web UI E2E (Playwright)') {
+      agent { docker { image 'mcr.microsoft.com/playwright:v1.47.0-jammy' } }
+      environment {
+        E2E_BASE_URL = "${env.E2E_BASE_URL}"
+        E2E_EMAIL    = "${env.E2E_EMAIL}"
+        E2E_PASSWORD = "${env.E2E_PASSWORD}"
+      }
+      steps {
+        sh 'npm i -D @playwright/test'
+        sh 'npx playwright install --with-deps'
+        sh 'npx playwright test --reporter=html'
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true
+        }
+      }
+    }
 
     stage('Show endpoints') {
       steps {
@@ -196,6 +246,13 @@ pipeline {
 
           echo "You can test:   curl http://<ELB>/api/brand/list"
         '''
+      }
+    }
+
+    stage('Promote to Prod') {
+      when { expression { currentBuild.currentResult == 'SUCCESS' } }
+      steps {
+        echo 'All tests passed. Deploying to production...'
       }
     }
   }
