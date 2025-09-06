@@ -171,7 +171,7 @@ pipeline {
               --dry-run=client -o yaml | kubectl apply -f -
 
             # Substitute image into the checked-in Job file and apply it
-            sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/99-seed-db.yaml \
+            sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/dfs/99-seed-db.yaml \
               | kubectl -n "$NAMESPACE" apply -f -
 
             # Wait for the Job to finish (don’t fail the whole pipeline if it times out)
