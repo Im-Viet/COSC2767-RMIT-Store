@@ -122,8 +122,6 @@ pipeline {
       agent { docker { image 'node:22' } }
       steps {
         dir('server') {
-          // one-time devDeps if not committed
-          sh 'npm i -D jest supertest mongodb-memory-server'
           sh 'npx jest --runInBand'
         }
       }
