@@ -210,7 +210,7 @@ pipeline {
       '''
       emailext(
         subject: "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-        to: '',
+        to: 'antthames92@gmail.com',
         body: """
           <h2>Build Failed</h2>
           <p><b>Job:</b> ${env.JOB_NAME}<br/>
