@@ -128,7 +128,6 @@ pipeline {
     stage('Kube context') {
       steps {
         sh 'aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"'
-        sh 'kubectl version --client --output=yaml || true'
       }
     }
 
@@ -216,6 +215,17 @@ pipeline {
         kubectl -n "$NAMESPACE" rollout undo deploy/frontend || true
         kubectl -n "$NAMESPACE" get deploy -o wide || true
       '''
+      emailext(
+        subject: "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """
+          <h2>Build Failed</h2>
+          <p><b>Job:</b> ${env.JOB_NAME}<br/>
+            <b>Build #:</b> ${env.BUILD_NUMBER}<br/>
+            <b>Status:</b> ${currentBuild.currentResult}<br/>
+            <b>Branch:</b> ${env.BRANCH_NAME ?: 'main'}</p>
+          <p><a href="${env.BUILD_URL}">Open build</a></p>
+        """
+      )
     }
     always {
       archiveArtifacts artifacts: '**/Dockerfile, k8s/**/*.yaml', fingerprint: true, onlyIfSuccessful: false
