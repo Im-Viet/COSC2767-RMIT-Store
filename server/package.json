@@ -6,7 +6,6 @@
     "dev": "nodemon",
     "start": "cross-env NODE_ENV=production node index.js",
     "seed:db": "node utils/seed.js",
-    "pretest": "npm ci --include=dev",
     "test": "npx jest --runInBand"
   },
   "dependencies": {
