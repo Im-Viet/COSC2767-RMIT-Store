@@ -132,18 +132,11 @@ pipeline {
     stage('Compute E2E_BASE_URL') {
       steps {
         script {
-          // Prefer hostname; fall back to IP
-          def endpoint = sh(
-            script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
-            returnStdout: true
-          ).trim()
-          if (!endpoint) {
-            endpoint = sh(
-              script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'",
-              returnStdout: true
-            ).trim()
+          def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
+          if (!ep) {
+            ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
           }
-          env.E2E_BASE_URL = "http://${endpoint}:8080"
+          env.E2E_BASE_URL = "http://${ep}:8080"
           echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
         }
       }
