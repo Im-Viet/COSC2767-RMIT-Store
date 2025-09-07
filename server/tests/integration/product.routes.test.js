@@ -21,7 +21,8 @@ async function seedOneProduct() {
     quantity: 10,
     isActive: true,
     brand: brand._id,          // product stores brand ObjectId
-    category: category._id,    // store category ObjectId
+    category: category._id,
+    averageRating: 4,          // store average rating
     imageUrl: ''
   });
 
@@ -42,7 +43,10 @@ describe('GET /api/product/list', () => {
 
     const res = await request(app)
       .get('/api/product/list')
-      .expect(200);
+      .query({
+        averageRating: JSON.stringify(4),
+        price: JSON.stringify({ min: 0, max: 999999 }),
+      }).expect(200);
 
     expect(Array.isArray(res.body.products)).toBe(true);
     expect(res.body.products.length).toBeGreaterThan(0);
@@ -54,7 +58,18 @@ describe('GET /api/product/list', () => {
 
   test('gracefully handles DB failure (returns 400)', async () => {
     const spy = jest.spyOn(Product, 'aggregate').mockRejectedValue(new Error('db down'));
-    await request(app).get('/api/product/list').expect(400);
+
+    await request(app)
+      .get('/api/product/list')
+      .query({
+        sortOrder: JSON.stringify({ created: -1 }),
+        rating: JSON.stringify(0),
+        price: JSON.stringify({ min: 0, max: 999999 }),
+        page: '1',
+        limit: '10'
+      })
+      .expect(400);
+
     spy.mockRestore();
   });
 });
