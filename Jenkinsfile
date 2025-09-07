@@ -30,12 +30,12 @@ pipeline {
   }
 
   stages {
-    stage('Prep') {
-      steps {
-        cleanWs()            // wipe before build
-        checkout scm
-      }
-    }
+    // stage('Prep') {
+    //   steps {
+    //     cleanWs()            // wipe before build
+    //     checkout scm
+    //   }
+    // }
 
     stage('Resolve IDs & Login to ECR') {
       steps {
