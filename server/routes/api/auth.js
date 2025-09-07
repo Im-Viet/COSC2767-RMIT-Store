@@ -20,15 +20,17 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     console.log(email, password);
-    System.out.println(email, password);
+    // System.out.println(email, password);
 
     if (!email) {
+      console.log('No email');
       return res
         .status(400)
         .json({ error: 'You must enter an email address.' });
     }
 
     if (!password) {
+      console.log('No password');
       return res.status(400).json({ error: 'You must enter a password.' });
     }
 
