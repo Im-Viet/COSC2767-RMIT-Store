@@ -13,8 +13,9 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  // clean all collections between tests
-  const { collections } = mongoose.connection;
+  const conn = mongoose.connection;
+  if (conn.readyState !== 1) return; // not connected, skip cleanup
+  const { collections } = conn;
   for (const key of Object.keys(collections)) {
     await collections[key].deleteMany({});
   }

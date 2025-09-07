@@ -46,6 +46,8 @@ describe('GET /api/product/list', () => {
         limit: 10,
       })
       .expect(200);
+    
+    console.log('products length', res.body.products?.length, res.body);
 
     expect(Array.isArray(res.body.products)).toBe(true);
     expect(res.body.products.length).toBeGreaterThan(0);
