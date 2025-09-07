@@ -180,6 +180,19 @@ pipeline {
       }
     }
 
+    stage('Show endpoints') {
+      steps {
+        script {
+          def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
+          if (!ep) {
+            ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
+          }
+          env.E2E_BASE_URL = "http://${ep}:8080"
+          echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
+        }
+      }
+    }
+
     stage('Web UI E2E (Playwright)') {
       steps {
         sh '''
@@ -191,6 +204,7 @@ pipeline {
             -e HOME=/work \
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e E2E_BASE_URL="${E2E_BASE_URL}" \
             -v "$PWD":/work -w /work \
             mcr.microsoft.com/playwright:v1.55.0-jammy \
             bash -lc '
@@ -206,13 +220,7 @@ pipeline {
 
     stage('Show endpoints') {
       steps {
-        script {
-          def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
-          if (!ep) {
-            ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
-          }
-          echo "endpoint=http://${ep}:8080"
-        }
+        sh ' echo "You can test: ${E2E_BASE_URL} "'
       }
     }
 
