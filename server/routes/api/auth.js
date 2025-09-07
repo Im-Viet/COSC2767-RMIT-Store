@@ -19,6 +19,8 @@ const { secret, tokenLife } = keys.jwt;
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log(email, password);
+    System.out.println(email, password);
 
     if (!email) {
       return res
