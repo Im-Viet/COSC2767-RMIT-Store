@@ -38,7 +38,7 @@ describe('GET /api/product/list', () => {
   });
 
   test('returns paginated products and metadata', async () => {
-    await seedOneProduct();
+    const { brand, category} = await seedOneProduct();
 
     // send the params the API currently expects to avoid price: undefined / rating: NaN in $match
     const res = await request(app)
@@ -47,10 +47,10 @@ describe('GET /api/product/list', () => {
         sortOrder: JSON.stringify({ created: -1 }),
         page: '1',
         limit: '10',
-        rating: '0',                                  // avoid $gte: NaN
-        price: JSON.stringify({ min: 0, max: 999999 }), // avoid price: undefined
-        category: 't-shirts',                         // ensure slug lookups succeed
-        brand: 'rmit',
+        rating: JSON.stringify(0),                                  // avoid $gte: NaN
+        priceRange: JSON.stringify({ min: 0, max: 999999 }), // avoid price: undefined
+        category: category.slug,                         // ensure slug lookups succeed
+        brand: brand.slug,
       })
       .expect(200);
 
