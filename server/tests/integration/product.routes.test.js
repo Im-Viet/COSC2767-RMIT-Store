@@ -38,23 +38,25 @@ describe('GET /api/product/list', () => {
   });
 
   test('returns paginated products and metadata', async () => {
-    const { brand, category} = await seedOneProduct();
+    const { brand, category } = await seedOneProduct();
 
-    // send the params the API currently expects to avoid price: undefined / rating: NaN in $match
     const res = await request(app)
       .get('/api/product/list')
       .query({
+        // these three are JSON-parsed by the route
         sortOrder: JSON.stringify({ created: -1 }),
+        rating: JSON.stringify(0),
+        priceRange: JSON.stringify({ min: 0, max: 999999 }),
+
+        // pagination as strings is safest for querystring
         page: '1',
         limit: '10',
-        rating: JSON.stringify(0.00),                                  // avoid $gte: NaN
-        price: 19.99, // avoid price: undefined
-        category: category.slug,                         // ensure slug lookups succeed
-        brand: brand.slug,
+
+        // filters the route looks up by slug and then converts to ObjectId
+        category: category.slug, // 't-shirts'
+        brand: brand.slug,       // 'rmit'
       })
       .expect(200);
-
-    console.log('products length', res.body.products?.length, res.body);
 
     expect(Array.isArray(res.body.products)).toBe(true);
     expect(res.body.products.length).toBeGreaterThan(0);
@@ -62,6 +64,7 @@ describe('GET /api/product/list', () => {
     expect(res.body).toHaveProperty('currentPage');
     expect(res.body).toHaveProperty('count');
   });
+
 
   test('gracefully handles DB failure (returns 400)', async () => {
     const spy = jest.spyOn(Product, 'aggregate').mockRejectedValue(new Error('db down'));
