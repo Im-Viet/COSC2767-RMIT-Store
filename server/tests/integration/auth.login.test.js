@@ -24,6 +24,9 @@ describe('POST /api/auth/login', () => {
     await seedAdmin();
   });
 
+  const email = 'admin@rmit.edu.vn';
+  const password = 'mypassword';
+
   test('logs in with valid credentials', async () => {
     const res = await request(app)
       .post('/api/auth/login')
