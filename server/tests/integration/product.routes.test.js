@@ -19,8 +19,7 @@ async function seedOneProduct() {
     isActive: true,
     brand: brand._id,
     category: category.slug || category._id, // model keeps both refs in queries
-    imageUrl: '',
-    rating: 4,
+    imageUrl: ''
   });
   category.products = [p._id];
   await category.save();

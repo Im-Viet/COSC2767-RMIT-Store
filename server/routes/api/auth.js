@@ -19,31 +19,25 @@ const { secret, tokenLife } = keys.jwt;
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log(email, password);
-    // System.out.println(email, password);
 
     if (!email) {
-      console.log('No email');
       return res
         .status(400)
         .json({ error: 'You must enter an email address.' });
     }
 
     if (!password) {
-      console.log('No password');
       return res.status(400).json({ error: 'You must enter a password.' });
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      console.log('No user');
       return res
         .status(400)
         .send({ error: 'No user found for this email address.' });
     }
 
     if (user && user.provider !== EMAIL_PROVIDER.Email) {
-      console.log('Wrong provider');
       return res.status(400).send({
         error: `That email address is already in use using ${user.provider} provider.`
       });
@@ -52,7 +46,6 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      console.log('Wrong password');
       return res.status(400).json({
         success: false,
         error: 'Password Incorrect'
@@ -81,7 +74,6 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(error);
     res.status(400).json({
       error: 'Your request could not be processed. Please try again.'
     });
