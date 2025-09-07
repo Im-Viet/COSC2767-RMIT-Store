@@ -13,14 +13,16 @@ async function seedAdmin(email = 'admin@rmit.edu.vn', password = 'mypassword') {
     email,
     password: hash,
     provider: EMAIL_PROVIDER.Email,
-    role: ROLES.ADMIN,
+    role: ROLES.Admin,
     firstName: 'admin',
     lastName: 'admin'
   });
 }
 
-describe('POST /api/auth/login', async () => {
-  await seedAdmin();
+describe('POST /api/auth/login', () => {
+  beforeEach(async () => {
+    await seedAdmin();
+  });
 
   test('logs in with valid credentials', async () => {
     const res = await request(app)
