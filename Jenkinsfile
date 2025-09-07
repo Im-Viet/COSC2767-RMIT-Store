@@ -189,7 +189,7 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          docker pull mcr.microsoft.com/playwright:v1.46.0-jammy
+          docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
           docker run --rm \
             --shm-size=1g \
             -u $(id -u):$(id -g) \
@@ -198,7 +198,7 @@ pipeline {
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e E2E_BASE_URL="${E2E_BASE_URL}" \
             -v "$PWD":/work -w /work \
-            mcr.microsoft.com/playwright:v1.46.0-jammy \
+            mcr.microsoft.com/playwright:v1.55.0-jammy \
             bash -lc '
               mkdir -p .npm-cache
               npm ci --no-audit --no-fund
