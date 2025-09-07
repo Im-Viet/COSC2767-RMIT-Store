@@ -134,10 +134,13 @@ pipeline {
     stage('Backend: Unit + Integration tests') {
       steps { 
         sh '''
-          set -euxo pipefail
-          npm ci --prefix server --no-audit --no-fund
-          node -p "require.resolve('mongoose')" --prefix server >/dev/null
-          npm --prefix server run test
+          # Run tests inside a temporary container with all dependencies
+          docker run --rm \
+            -v "${PWD}/server:/app" \
+            -w /app \
+            --user $(id -u):$(id -g) \
+            node:22-alpine \
+            sh -c "npm ci && npm test"
         '''
       }
       post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }

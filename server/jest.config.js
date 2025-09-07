@@ -6,4 +6,11 @@ module.exports = {
   verbose: true,
   forceExit: true,
   detectOpenHandles: true,
+  reporters: [
+    'default',
+    ['jest-junit', {
+      outputDirectory: '.',
+      outputName: 'junit.xml'
+    }]
+  ]
 };
