@@ -92,11 +92,11 @@ pipeline {
     }
 
     stage('Build backend image') {
-      steps { sh 'docker build --no-cache -f server/Dockerfile -t "$BACKEND_IMAGE" .' }
+      steps { sh 'docker build -f server/Dockerfile -t "$BACKEND_IMAGE" .' }
     }
 
     stage('Build frontend image') {
-      steps { sh 'docker build --no-cache -f client/Dockerfile -t "$FRONTEND_IMAGE" .' }
+      steps { sh 'docker build -f client/Dockerfile -t "$FRONTEND_IMAGE" .' }
     }
 
     stage('Push images') {
@@ -138,7 +138,8 @@ pipeline {
           docker run --rm \
             -v "${PWD}/server:/app" \
             -w /app \
-            --user $(id -u):$(id -g) \
+            -e NPM_CONFIG_CACHE=/tmp/.npm \
+            -e HOME=/tmp \
             node:22-alpine \
             sh -c "npm ci && npm test"
         '''
