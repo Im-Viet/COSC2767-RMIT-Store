@@ -86,11 +86,11 @@ pipeline {
     }
 
     stage('Build backend image') {
-      steps { sh 'docker build --no-cache -f server/Dockerfile -t "$BACKEND_IMAGE" .' }
+      steps { sh 'docker build -f server/Dockerfile -t "$BACKEND_IMAGE" .' }
     }
 
     stage('Build frontend image') {
-      steps { sh 'docker build --no-cache -f client/Dockerfile -t "$FRONTEND_IMAGE" .' }
+      steps { sh 'docker build -f client/Dockerfile -t "$FRONTEND_IMAGE" .' }
     }
 
     stage('Push images') {
@@ -131,10 +131,10 @@ pipeline {
         sh '''
           set -euo pipefail
           echo "Installing all workspaces (root + server + client + e2e)"
-          npm ci --workspaces --include-workspace-root --no-audit --no-fund --prefer-offline
+          npm ci --no-audit --no-fund --prefer-offline
 
           # Install Playwright browsers for CI (Chromium is enough for most suites)
-          npx -w e2e playwright install chromium
+          npx e2e playwright install chromium
         '''
       }
     }
