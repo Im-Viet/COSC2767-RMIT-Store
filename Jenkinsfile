@@ -191,7 +191,6 @@ pipeline {
     stage('Web UI E2E (Playwright)') {
       environment { DEV_BASE_URL = "${env.DEV_BASE_URL}" }
       steps { sh 'E2E_BASE_URL="${E2E_BASE_URL}" npm run test:e2e' }
-    }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
 
