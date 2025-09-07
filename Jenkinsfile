@@ -134,6 +134,7 @@ pipeline {
 
           # Install Playwright browsers for CI (Chromium is enough for most suites)
           npx playwright install chromium
+          npx playwright install-deps chromium
         '''
       }
     }
@@ -188,50 +189,10 @@ pipeline {
       }
     }
 
-    stage('Install Playwright Browsers') {
-      steps {
-        sh '''
-          # Set environment to skip host validation for fallback
-          export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
-          
-          # Install Playwright browsers
-          npx playwright install chromium
-          
-          # Verify installation
-          npx playwright --version
-        '''
-      }
-    }
-
     stage('Web UI E2E (Playwright)') {
-      steps {
-        withCredentials([string(credentialsId: 'e2e-password', variable: 'E2E_PASSWORD')]) {
-          script {
-            // Use Docker to run E2E tests with all dependencies pre-installed
-            def e2eResult = sh(
-              script: '''
-                docker run --rm \
-                  -v "${PWD}:/workspace" \
-                  -w /workspace \
-                  -e E2E_BASE_URL="${E2E_BASE_URL}" \
-                  -e E2E_EMAIL="admin@rmit.edu.vn" \
-                  -e E2E_PASSWORD="${E2E_PASSWORD}" \
-                  mcr.microsoft.com/playwright:v1.55.0-focal \
-                  bash -c "npm ci && npm run test:e2e"
-              ''',
-              returnStatus: true
-            )
-            if (e2eResult != 0) {
-              error("E2E tests failed")
-            }
-          }
-        }
-      }
-      post { 
-        always { 
-          archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true, allowEmptyArchive: true
-        } 
-      }
+      environment { DEV_BASE_URL = "${env.DEV_BASE_URL}" }
+      steps { sh 'E2E_BASE_URL="${E2E_BASE_URL}" npm run test:e2e' }
+      post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
 
     stage('Show endpoints') {
