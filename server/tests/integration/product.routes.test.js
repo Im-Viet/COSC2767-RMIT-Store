@@ -45,7 +45,7 @@ describe('GET /api/product/list', () => {
       .query({
         // these three are JSON-parsed by the route
         // sortOrder: JSON.stringify({ created: -1 }),
-        // rating: JSON.stringify(0),
+        rating: JSON.stringify(0),
         // priceRange: JSON.stringify({ min: 0, max: 999999 }),
 
         // pagination as strings is safest for querystring
