@@ -1,5 +1,5 @@
 const Mongoose = require('mongoose');
-const slug = require('mongoose-slug-updater');
+const slug = require('mongoose-slug-generator');
 const { Schema } = Mongoose;
 
 const options = {
