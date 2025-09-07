@@ -133,7 +133,7 @@ pipeline {
           npm ci
 
           # Install Playwright browsers for CI (Chromium is enough for most suites)
-          # npx e2e playwright install chromium
+          npx playwright install chromium
         '''
       }
     }
@@ -185,6 +185,16 @@ pipeline {
             kubectl -n "$NAMESPACE" delete secret seed-admin --ignore-not-found=true
           '''
         }
+      }
+    }
+
+    stage('Install Playwright Browsers') {
+      steps {
+        sh '''
+          # Install Playwright browsers for E2E tests
+          npx playwright install chromium
+          npx playwright install-deps chromium
+        '''
       }
     }
 
