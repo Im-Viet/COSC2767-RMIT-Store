@@ -131,9 +131,6 @@ pipeline {
         sh '''
           set -euo pipefail
           npm ci
-
-          # Install Playwright browsers for CI (Chromium is enough for most suites)
-          npx playwright install chromium
         '''
       }
     }
@@ -196,18 +193,23 @@ pipeline {
           docker run --rm \
             --shm-size=1g \
             -u $(id -u):$(id -g) \
+            -e HOME=/work \
+            -e NPM_CONFIG_CACHE=/work/.npm-cache \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e E2E_BASE_URL="${E2E_BASE_URL}" \
             -v "$PWD":/work -w /work \
             mcr.microsoft.com/playwright:v1.46.0-jammy \
             bash -lc '
-              npm ci
-              npx playwright install chromium
-              npm run test:e2e
+              mkdir -p .npm-cache
+              npm ci --no-audit --no-fund
+              # Browsers are already baked into the image via /ms-playwright
+              npx playwright test --reporter=html
             '
         '''
       }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
+
 
 
     stage('Show endpoints') {
