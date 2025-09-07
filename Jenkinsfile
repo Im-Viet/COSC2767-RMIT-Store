@@ -191,15 +191,23 @@ pipeline {
     stage('Install Playwright Browsers') {
       steps {
         sh '''
+          # Set environment to skip host validation
+          export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
+          
           # Install Playwright browsers for E2E tests
-          npx playwright install chromium
-          npx playwright install-deps chromium
+          npx playwright install chromium --with-deps || npx playwright install chromium
+          
+          # Verify installation
+          npx playwright --version
         '''
       }
     }
 
     stage('Web UI E2E (Playwright)') {
-      environment { DEV_BASE_URL = "${env.DEV_BASE_URL}" }
+      environment { 
+        DEV_BASE_URL = "${env.DEV_BASE_URL}"
+        PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true"
+      }
       steps { sh 'E2E_BASE_URL="${E2E_BASE_URL}" npm run test:e2e' }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
