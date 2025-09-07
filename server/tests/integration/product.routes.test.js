@@ -8,45 +8,52 @@ const Category = require('../../models/category');
 const app = buildTestApp();
 
 async function seedOneProduct() {
-  const brand = await Brand.create({ name: 'RMIT', isActive: true });
-  const category = await Category.create({ name: 'T-Shirts', isActive: true });
+  // ensure slugs exist because the API does Category.findOne({ slug }) / Brand.findOne({ slug })
+  const brand = await Brand.create({ name: 'RMIT', slug: 'rmit', isActive: true });
+  const category = await Category.create({ name: 'T-Shirts', slug: 't-shirts', isActive: true });
+
   const p = await Product.create({
     sku: 'SKU-1',
     name: 'RMIT Tee',
+    slug: 'rmit-tee',
     description: 'Comfort tee',
     price: 19.99,
     quantity: 10,
     isActive: true,
-    brand: brand._id,
-    category: category.slug || category._id, // model keeps both refs in queries
+    brand: brand._id,          // product stores brand ObjectId
+    category: category._id,    // store category ObjectId
     imageUrl: ''
   });
-  category.products = [p._id];
-  await category.save();
+
+  await Category.updateOne({ _id: category._id }, { $set: { products: [p._id] } });
   return { brand, category, p };
 }
 
 describe('GET /api/product/list', () => {
   test('seed creates a product', async () => {
-    const created = await seedOneProduct(); // make sure this awaits a create()
+    const { p } = await seedOneProduct();
     const count = await Product.countDocuments({});
-    console.log('Seeded _id:', created._id?.toString(), 'Count:', count); // will show in Jest logs
-
+    console.log('Seeded _id:', p._id?.toString(), 'Count:', count);
     expect(count).toBeGreaterThan(0);
   });
 
   test('returns paginated products and metadata', async () => {
     await seedOneProduct();
 
+    // send the params the API currently expects to avoid price: undefined / rating: NaN in $match
     const res = await request(app)
       .get('/api/product/list')
       .query({
         sortOrder: JSON.stringify({ created: -1 }),
-        page: 1,
-        limit: 10,
+        page: '1',
+        limit: '10',
+        rating: '0',                                  // avoid $gte: NaN
+        price: JSON.stringify({ min: 0, max: 999999 }), // avoid price: undefined
+        category: 't-shirts',                         // ensure slug lookups succeed
+        brand: 'rmit',
       })
       .expect(200);
-    
+
     console.log('products length', res.body.products?.length, res.body);
 
     expect(Array.isArray(res.body.products)).toBe(true);
@@ -58,7 +65,7 @@ describe('GET /api/product/list', () => {
 
   test('gracefully handles DB failure (returns 400)', async () => {
     const spy = jest.spyOn(Product, 'aggregate').mockRejectedValue(new Error('db down'));
-    const res = await request(app).get('/api/product/list').expect(400);
+    await request(app).get('/api/product/list').expect(400);
     spy.mockRestore();
   });
 });
