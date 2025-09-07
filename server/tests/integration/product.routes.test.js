@@ -38,7 +38,7 @@ describe('GET /api/product/list', () => {
   });
 
   test('returns paginated products and metadata', async () => {
-    await seedOneProduct();
+    const { category, brand } = await seedOneProduct();
 
     const res = await request(app)
       .get('/api/product/list')
