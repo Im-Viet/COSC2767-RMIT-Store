@@ -180,7 +180,7 @@ pipeline {
       }
     }
 
-    stage('Show endpoints') {
+    stage('Set E2E_BASE_URL') {
       steps {
         script {
           def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
