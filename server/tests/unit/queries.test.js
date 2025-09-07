@@ -6,7 +6,7 @@ describe('utils/queries.getStoreProductsQuery', () => {
     const asString = JSON.stringify(pipeline);
     expect(asString).toContain('"price":{"$gte":10,"$lte":100}');
     // rating filter appears as $gte; function keeps structure even if rating falsy
-    expect(asString).toContain('"rating":{"$gte":4}');
+    expect(asString).toContain('"averageRating":{"$gte":4}');
     // includes lookups / addFields stages
     expect(asString).toContain('$lookup');
     expect(asString).toContain('$addFields');
