@@ -28,6 +28,14 @@ async function seedOneProduct() {
 }
 
 describe('GET /api/product/list', () => {
+  test('seed creates a product', async () => {
+    const created = await seedOneProduct(); // make sure this awaits a create()
+    const count = await Product.countDocuments({});
+    console.log('Seeded _id:', created._id?.toString(), 'Count:', count); // will show in Jest logs
+
+    expect(count).toBeGreaterThan(0);
+  });
+
   test('returns paginated products and metadata', async () => {
     await seedOneProduct();
 
