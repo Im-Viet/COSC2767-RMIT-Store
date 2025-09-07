@@ -9,6 +9,7 @@ beforeAll(async () => {
   await mongoose.connect(uri, {
     useNewUrlParser: true, useUnifiedTopology: true,
   });
+  mongoose.set('debug', true);
 });
 
 afterEach(async () => {
