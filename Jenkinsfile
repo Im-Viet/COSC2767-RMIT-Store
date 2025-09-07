@@ -145,6 +145,11 @@ pipeline {
         sh '''
           set -euo pipefail
 
+          # ---- Safe defaults so nounset doesn't kill the script ----
+          SPIN_UP_TEST_DB="${SPIN_UP_TEST_DB:-false}"
+          TEST_MONGO_IMAGE="${TEST_MONGO_IMAGE:-mongo:7}"
+          TEST_MONGO_URI="${TEST_MONGO_URI:-mongodb://mongo-test:27017/test}"
+
           NET="ci-net-$BUILD_TAG"
           docker network create "$NET" >/dev/null 2>&1 || true
 
@@ -154,14 +159,17 @@ pipeline {
           }
           trap cleanup EXIT
 
-          if [ "${SPIN_UP_TEST_DB}" = "true" ]; then
+          if [ "$SPIN_UP_TEST_DB" = "true" ]; then
             echo "Starting MongoDB for tests..."
-            docker run -d --name mongo-test --network "$NET" -e MONGO_INITDB_DATABASE=test "${TEST_MONGO_IMAGE}" >/dev/null
-            # wait for mongod to be ready
+            docker run -d --name mongo-test --network "$NET" -e MONGO_INITDB_DATABASE=test "$TEST_MONGO_IMAGE" >/dev/null
+
+            echo "Waiting for Mongo to be ready..."
             for i in $(seq 1 30); do
-              docker run --rm --network "$NET" "${TEST_MONGO_IMAGE}" mongosh --host mongo-test --eval 'db.adminCommand("ping")' >/dev/null 2>&1 && break || sleep 2
+              docker run --rm --network "$NET" "$TEST_MONGO_IMAGE" \
+                mongosh --quiet --host mongo-test --eval 'db.adminCommand("ping")' >/dev/null 2>&1 && break || sleep 2
             done
-            export TEST_MONGO_URI="${TEST_MONGO_URI}"
+
+            export MONGO_URI="$TEST_MONGO_URI"
           fi
 
           echo "Running backend tests inside Node container..."
@@ -170,9 +178,10 @@ pipeline {
             -e HOME=/work \
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e NODE_ENV=test \
-            -e MONGO_URI="${TEST_MONGO_URI:-}" \
+            -e MONGO_URI="${MONGO_URI:-}" \
             -v "$PWD/server":/work -w /work \
             node:22-bullseye bash -lc '
+              set -euo pipefail
               mkdir -p .npm-cache
               npm ci --no-audit --no-fund
               npm run test
@@ -181,10 +190,12 @@ pipeline {
       }
       post {
         always {
+          // If you use jest-junit, keep this; otherwise it will just be empty (harmless)
           junit allowEmptyResults: true, testResults: 'server/junit.xml'
         }
       }
     }
+
 
 
     stage('Backend: Unit + Integration tests') {
