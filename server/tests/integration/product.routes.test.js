@@ -34,12 +34,11 @@ describe('GET /api/product/list', () => {
   test('seed creates a product', async () => {
     const { p } = await seedOneProduct();
     const count = await Product.countDocuments({});
-    console.log('Seeded _id:', p._id?.toString(), 'Count:', count);
     expect(count).toBeGreaterThan(0);
   });
 
   test('returns paginated products and metadata', async () => {
-    const { category, brand } = await seedOneProduct();
+    await seedOneProduct();
 
     const res = await request(app)
       .get('/api/product/list')
