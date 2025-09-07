@@ -42,8 +42,20 @@ describe('GET /api/product/list', () => {
 
     const res = await request(app)
       .get('/api/product/list')
-      .query({})
-      .expect(200);
+      .query({
+        // these three are JSON-parsed by the route
+        // sortOrder: JSON.stringify({ created: -1 }),
+        // rating: JSON.stringify(0),
+        // priceRange: JSON.stringify({ min: 0, max: 999999 }),
+
+        // pagination as strings is safest for querystring
+        page: '1',
+        limit: '10',
+
+        // filters the route looks up by slug and then converts to ObjectId
+        category: category.slug, // 't-shirts'
+        brand: brand.slug,       // 'rmit'
+      }).expect(200);
 
     expect(Array.isArray(res.body.products)).toBe(true);
     expect(res.body.products.length).toBeGreaterThan(0);
