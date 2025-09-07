@@ -44,8 +44,10 @@ describe('GET /api/product/list', () => {
     const res = await request(app)
       .get('/api/product/list')
       .query({
-        averageRating: JSON.stringify(4),
-        price: JSON.stringify(19.99),
+        sortOrder: JSON.stringify({ created: -1 }),
+        rating: JSON.stringify(0),    // Product has 0 rating (no reviews)
+        min: JSON.stringify(10),      // Lower than our product's price of 19.99
+        max: JSON.stringify(25),      // Higher than our product's price of 19.99
       }).expect(200);
 
     expect(Array.isArray(res.body.products)).toBe(true);
