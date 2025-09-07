@@ -134,14 +134,9 @@ pipeline {
     stage('Backend: Unit + Integration tests') {
       steps { 
         sh '''
-          # Run tests inside a temporary container with all dependencies
-          docker run --rm \
-            -v "${PWD}/server:/app" \
-            -w /app \
-            -e NPM_CONFIG_CACHE=/tmp/.npm \
-            -e HOME=/tmp \
-            node:22-alpine \
-            sh -c "npm ci && npm test"
+          set -euxo pipefail
+          npm ci --prefix server --no-audit --no-fund
+          npm --prefix server run test
         '''
       }
       post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
