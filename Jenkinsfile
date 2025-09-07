@@ -26,6 +26,7 @@ pipeline {
     BACKEND_REPO = "${params.BACKEND_REPO}"
     FRONTEND_REPO = "${params.FRONTEND_REPO}"
     NPM_CONFIG_CACHE = "${JENKINS_HOME}/.npm-cache"
+    PLAYWRIGHT_BROWSERS_PATH = "${JENKINS_HOME}/.cache/ms-playwright"
     DOCKER_BUILDKIT = "1"
   }
 
@@ -129,30 +130,11 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
+          echo "Installing all workspaces (root + server + client + e2e)"
+          npm ci --workspaces --include-workspace-root --no-audit --no-fund --prefer-offline
 
-          # Prefer known locations; if they don’t exist, auto-discover.
-          ROOTS=""
-          [ -f server/package.json ]   && ROOTS="$ROOTS server"
-          [ -f e2e/package.json ]      && ROOTS="$ROOTS e2e"
-          [ -f frontend/package.json ] && ROOTS="$ROOTS frontend"
-          [ -f client/package.json ]   && ROOTS="$ROOTS client"
-
-          if [ -z "$ROOTS" ]; then
-            # Fallback: find package.json one level down (excluding node_modules)
-            ROOTS=$(find . -mindepth 1 -maxdepth 2 -type f -name package.json \
-                     -not -path "*/node_modules/*" -printf "%h\n" | sort -u)
-          fi
-
-          if [ -z "$ROOTS" ]; then
-            echo "No package.json found. Skipping installs."
-            exit 0
-          fi
-
-          echo "Installing for: $ROOTS"
-          for dir in $ROOTS; do
-            echo "---- npm ci in $dir ----"
-            npm ci --prefix "$dir" --no-audit --no-fund --prefer-offline
-          done
+          # Install Playwright browsers for CI (Chromium is enough for most suites)
+          npx -w e2e playwright install chromium
         '''
       }
     }
