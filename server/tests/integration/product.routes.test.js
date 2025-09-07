@@ -57,14 +57,8 @@ describe('GET /api/product/list', () => {
   });
 
   test('gracefully handles DB failure (returns 400)', async () => {
-    await seedOneProduct();
-    // simulate DB outage
-    await mongoose.connection.close();
-
-    const res = await request(app)
-      .get('/api/product/list')
-      .query({ sortOrder: JSON.stringify({ created: -1 }), page: 1, limit: 10 });
-
-    expect([400, 500]).toContain(res.status); // route returns 400 in catch
+    const spy = jest.spyOn(Product, 'aggregate').mockRejectedValue(new Error('db down'));
+    const res = await request(app).get('/api/product/list').expect(400);
+    spy.mockRestore();
   });
 });
