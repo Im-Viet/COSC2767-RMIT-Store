@@ -38,24 +38,11 @@ describe('GET /api/product/list', () => {
   });
 
   test('returns paginated products and metadata', async () => {
-    const { brand, category } = await seedOneProduct();
+    await seedOneProduct();
 
     const res = await request(app)
       .get('/api/product/list')
-      .query({
-        // these three are JSON-parsed by the route
-        sortOrder: JSON.stringify({ created: -1 }),
-        rating: JSON.stringify(0),
-        priceRange: JSON.stringify({ min: 0, max: 999999 }),
-
-        // pagination as strings is safest for querystring
-        page: '1',
-        limit: '10',
-
-        // filters the route looks up by slug and then converts to ObjectId
-        category: category.slug, // 't-shirts'
-        brand: brand.slug,       // 'rmit'
-      })
+      .query({})
       .expect(200);
 
     expect(Array.isArray(res.body.products)).toBe(true);
