@@ -132,7 +132,14 @@ pipeline {
     }
 
     stage('Backend: Unit + Integration tests') {
-      steps { sh 'npm run test' }
+      steps { 
+        sh '''
+          set -euxo pipefail
+          npm ci --prefix server --no-audit --no-fund
+          node -p "require.resolve('mongoose')" --prefix server >/dev/null
+          npm --prefix server run test
+        '''
+      }
       post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
     }
 
