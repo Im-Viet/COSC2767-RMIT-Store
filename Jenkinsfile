@@ -189,10 +189,26 @@ pipeline {
     }
 
     stage('Web UI E2E (Playwright)') {
-      environment { DEV_BASE_URL = "${env.DEV_BASE_URL}" }
-      steps { sh 'E2E_BASE_URL="${E2E_BASE_URL}" npm run test:e2e' }
+      steps {
+        sh '''
+          set -euo pipefail
+          docker pull mcr.microsoft.com/playwright:v1.46.0-jammy
+          docker run --rm \
+            --shm-size=1g \
+            -u $(id -u):$(id -g) \
+            -e E2E_BASE_URL="${E2E_BASE_URL}" \
+            -v "$PWD":/work -w /work \
+            mcr.microsoft.com/playwright:v1.46.0-jammy \
+            bash -lc '
+              npm ci
+              npx playwright install chromium
+              npm run test:e2e
+            '
+        '''
+      }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
+
 
     stage('Show endpoints') {
       steps {
