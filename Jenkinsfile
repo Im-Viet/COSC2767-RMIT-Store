@@ -17,10 +17,6 @@ pipeline {
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
     booleanParam(name: 'SEED_DB',        defaultValue: false, description: 'Run seed job after deploy')
     booleanParam(name: 'RUN_NPM_INSTALL', defaultValue: true, description: 'Run npm ci for all packages before tests')
-    booleanParam(name: 'TESTS_IN_DOCKER',   defaultValue: true,  description: 'Run backend tests inside a Docker container')
-    booleanParam(name: 'SPIN_UP_TEST_DB',   defaultValue: false, description: 'Start a MongoDB container for integration tests')
-    string(      name: 'TEST_MONGO_IMAGE',  defaultValue: 'mongo:7', description: 'Mongo image for tests')
-    string(      name: 'TEST_MONGO_URI',    defaultValue: 'mongodb://mongo-test:27017/test', description: 'Mongo URI used by tests')
   }
 
   environment {
@@ -60,26 +56,19 @@ pipeline {
               echo "ECR repo $repo already exists"
             else
               echo "Creating ECR repo: $repo"
-              aws ecr create-repository \
-                --region "$REGION" \
-                --repository-name "$repo" \
-                --image-scanning-configuration scanOnPush=true \
-                --encryption-configuration encryptionType=AES256
+              aws ecr create-repository --region "$REGION" --repository-name "$repo" --image-scanning-configurations canOnPush=true --encryption-configuration encryptionType=AES256
 
               # Optional: keep only the last 10 images (best-effort; ignore if denied)
-              aws ecr put-lifecycle-policy \
-                --region "$REGION" \
-                --repository-name "$repo" \
-                --lifecycle-policy-text '{
-                  "rules": [
-                    {
-                      "rulePriority": 1,
-                      "description": "Keep last 10 images",
-                      "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10 },
-                      "action": { "type": "expire" }
-                    }
-                  ]
-                }' || true
+              aws ecr put-lifecycle-policy --region "$REGION" --repository-name "$repo" --lifecycle-policy-text '{
+                "rules": [
+                  {
+                    "rulePriority": 1,
+                    "description": "Keep last 10 images",
+                    "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10 },
+                    "action": { "type": "expire" }
+                  }
+                ]
+              }' || true
             fi
           }
 
@@ -129,26 +118,10 @@ pipeline {
       }
     }
 
-    stage('Install (backend + e2e)') {
-      when { expression { return params.RUN_NPM_INSTALL } }
+    stage('Backend: Unit + Integration tests') {
       steps {
         sh '''
           set -euo pipefail
-          npm ci
-        '''
-      }
-    }
-
-    stage('Backend: Unit + Integration tests (Docker)') {
-      when { expression { return params.TESTS_IN_DOCKER } }
-      steps {
-        sh '''
-          set -euo pipefail
-
-          # ---- Safe defaults so nounset doesn't kill the script ----
-          SPIN_UP_TEST_DB="${SPIN_UP_TEST_DB:-false}"
-          TEST_MONGO_IMAGE="${TEST_MONGO_IMAGE:-mongo:7}"
-          TEST_MONGO_URI="${TEST_MONGO_URI:-mongodb://mongo-test:27017/test}"
 
           NET="ci-net-$BUILD_TAG"
           docker network create "$NET" >/dev/null 2>&1 || true
@@ -158,19 +131,6 @@ pipeline {
             docker network rm "$NET" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
-
-          if [ "$SPIN_UP_TEST_DB" = "true" ]; then
-            echo "Starting MongoDB for tests..."
-            docker run -d --name mongo-test --network "$NET" -e MONGO_INITDB_DATABASE=test "$TEST_MONGO_IMAGE" >/dev/null
-
-            echo "Waiting for Mongo to be ready..."
-            for i in $(seq 1 30); do
-              docker run --rm --network "$NET" "$TEST_MONGO_IMAGE" \
-                mongosh --quiet --host mongo-test --eval 'db.adminCommand("ping")' >/dev/null 2>&1 && break || sleep 2
-            done
-
-            export MONGO_URI="$TEST_MONGO_URI"
-          fi
 
           echo "Running backend tests inside Node container..."
           docker run --rm --network "$NET" --init \
@@ -188,32 +148,7 @@ pipeline {
             '
         '''
       }
-      post {
-        always {
-          // If you use jest-junit, keep this; otherwise it will just be empty (harmless)
-          junit allowEmptyResults: true, testResults: 'server/junit.xml'
-        }
-      }
-    }
-
-
-
-    stage('Backend: Unit + Integration tests') {
-      steps { sh 'npm run test' }
       post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
-    }
-
-    stage('Compute E2E_BASE_URL') {
-      steps {
-        script {
-          def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
-          if (!ep) {
-            ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
-          }
-          env.E2E_BASE_URL = "http://${ep}:8080"
-          echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
-        }
-      }
     }
 
     stage('Seed database (from file)') {
@@ -238,10 +173,7 @@ pipeline {
             sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/99-seed-db.yaml \
               | kubectl -n "$NAMESPACE" apply -f -
 
-            # Wait for the Job to finish (don’t fail the whole pipeline if it times out)
             kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db --timeout=180s || true
-
-            # Optional: keep or delete the secret; delete means creds won’t linger in the cluster
             kubectl -n "$NAMESPACE" delete secret seed-admin --ignore-not-found=true
           '''
         }
@@ -259,7 +191,6 @@ pipeline {
             -e HOME=/work \
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-            -e E2E_BASE_URL="${E2E_BASE_URL}" \
             -v "$PWD":/work -w /work \
             mcr.microsoft.com/playwright:v1.55.0-jammy \
             bash -lc '
@@ -273,19 +204,15 @@ pipeline {
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
 
-
-
     stage('Show endpoints') {
       steps {
-        sh '''
-          echo "=== Kubernetes objects ($NAMESPACE) ==="
-          kubectl -n "$NAMESPACE" get deploy,svc,ingress -o wide || true
-
-          echo "=== If using NGINX Ingress Service LB ==="
-          kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\\n"}' || true
-
-          echo "You can test:   curl http://<ELB>/api/brand/list"
-        '''
+        script {
+          def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
+          if (!ep) {
+            ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
+          }
+          echo "endpoint=http://${ep}:8080"
+        }
       }
     }
 
