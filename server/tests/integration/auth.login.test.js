@@ -26,7 +26,7 @@ describe('POST /api/login', () => {
 
   test('logs in with valid credentials', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/login')
       .send({ email, password })
       .expect(200);
 
@@ -37,7 +37,7 @@ describe('POST /api/login', () => {
 
   test('rejects invalid password', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/login')
       .send({ email, password: 'wrong' })
       .expect(400);
 
