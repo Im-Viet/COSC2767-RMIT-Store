@@ -12,12 +12,11 @@ pipeline {
     string(name: 'AWS_REGION',    defaultValue: 'us-east-1', description: 'AWS region')
     string(name: 'EKS_CLUSTER',   defaultValue: 'rmit-eks',  description: 'EKS cluster name')
     string(name: 'K8S_NAMESPACE', defaultValue: 'dev',       description: 'Kubernetes namespace')
-    booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
-    booleanParam(name: 'SEED_DB',        defaultValue: false, description: 'Run seed job after deploy')
     string(name: 'BACKEND_REPO', defaultValue: 'rmit-store/backend', description: 'Backend repository')
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'Frontend repository')
-    // Use Jenkins Credentials instead of plain strings:
-    // Create a Jenkins credential ID "seed-admin" (Username = admin email, Password = admin password)
+    booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
+    booleanParam(name: 'SEED_DB',        defaultValue: false, description: 'Run seed job after deploy')
+    booleanParam(name: 'RUN_NPM_INSTALL', defaultValue: true, description: 'Run npm ci for all packages before tests')
   }
 
   environment {
@@ -26,6 +25,7 @@ pipeline {
     NAMESPACE = "${params.K8S_NAMESPACE}"
     BACKEND_REPO = "${params.BACKEND_REPO}"
     FRONTEND_REPO = "${params.FRONTEND_REPO}"
+    NPM_CONFIG_CACHE = "${JENKINS_HOME}/.npm-cache"
     DOCKER_BUILDKIT = "1"
   }
 
@@ -120,6 +120,39 @@ pipeline {
           # wait for rollouts
           kubectl -n "$NAMESPACE" rollout status deploy/backend --timeout=180s
           kubectl -n "$NAMESPACE" rollout status deploy/frontend --timeout=180s
+        '''
+      }
+    }
+
+    stage('Install (backend + e2e)') {
+      when { expression { return params.RUN_NPM_INSTALL } }
+      steps {
+        sh '''
+          set -euo pipefail
+
+          # Prefer known locations; if they don’t exist, auto-discover.
+          ROOTS=""
+          [ -f server/package.json ]   && ROOTS="$ROOTS server"
+          [ -f e2e/package.json ]      && ROOTS="$ROOTS e2e"
+          [ -f frontend/package.json ] && ROOTS="$ROOTS frontend"
+          [ -f client/package.json ]   && ROOTS="$ROOTS client"
+
+          if [ -z "$ROOTS" ]; then
+            # Fallback: find package.json one level down (excluding node_modules)
+            ROOTS=$(find . -mindepth 1 -maxdepth 2 -type f -name package.json \
+                     -not -path "*/node_modules/*" -printf "%h\n" | sort -u)
+          fi
+
+          if [ -z "$ROOTS" ]; then
+            echo "No package.json found. Skipping installs."
+            exit 0
+          fi
+
+          echo "Installing for: $ROOTS"
+          for dir in $ROOTS; do
+            echo "---- npm ci in $dir ----"
+            npm ci --prefix "$dir" --no-audit --no-fund --prefer-offline
+          done
         '''
       }
     }
