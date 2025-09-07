@@ -7,22 +7,20 @@ const { ROLES } = require('../../constants');
 
 const app = buildTestApp();
 
-describe('POST /api/auth/login', () => {
-  const email = 'admin@rmit.edu.vn';
-  const password = 'mypassword';
+async function seedAdmin(email = 'admin@rmit.edu.vn', password = 'mypassword') {
+  const hash = await bcrypt.hash(password, 10);
+  return User.create({
+    email,
+    password: hash,
+    provider: EMAIL_PROVIDER.Email,
+    role: ROLES.ADMIN,
+    firstName: 'admin',
+    lastName: 'admin'
+  });
+}
 
-  // beforeEach(async () => {
-  //   const salt = await bcrypt.genSalt(10);
-  //   const hash = await bcrypt.hash(password, salt);
-  //   await User.create({
-  //     email,
-  //     password: hash,
-  //     provider: EMAIL_PROVIDER.Email,
-  //     role: ROLES.USER,
-  //     firstName: 'user',
-  //     lastName: 'user'
-  //   });
-  // });
+describe('POST /api/auth/login', async () => {
+  await seedAdmin();
 
   test('logs in with valid credentials', async () => {
     const res = await request(app)
