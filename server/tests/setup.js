@@ -6,7 +6,10 @@ let mongo;
 beforeAll(async () => {
   mongo = await MongoMemoryServer.create();
   const uri = mongo.getUri();
-  await mongoose.connect(uri);
+  // await mongoose.connect(uri);
+  await mongoose.connect(uri, {
+    useNewUrlParser: true, useUnifiedTopology: true,
+  });
 });
 
 afterEach(async () => {
