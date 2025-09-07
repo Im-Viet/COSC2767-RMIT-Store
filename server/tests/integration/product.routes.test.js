@@ -45,7 +45,7 @@ describe('GET /api/product/list', () => {
       .get('/api/product/list')
       .query({
         averageRating: JSON.stringify(4),
-        price: JSON.stringify({ min: 0, max: 999999 }),
+        price: JSON.stringify(19.99),
       }).expect(200);
 
     expect(Array.isArray(res.body.products)).toBe(true);
