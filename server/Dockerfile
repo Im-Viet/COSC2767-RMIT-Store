@@ -10,7 +10,7 @@ RUN npm ci
 COPY server/ ./
 
 # Runtime env - bind to all interfaces so K8s can reach it
-ENV NODE_ENV=development
+# ENV NODE_ENV=development
 ENV HOST=0.0.0.0
 ENV PORT=3000
 
