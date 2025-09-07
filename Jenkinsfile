@@ -130,11 +130,10 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          echo "Installing all workspaces (root + server + client + e2e)"
-          npm ci --no-audit --no-fund --prefer-offline
+          npm ci
 
           # Install Playwright browsers for CI (Chromium is enough for most suites)
-          npx e2e playwright install chromium
+          # npx e2e playwright install chromium
         '''
       }
     }
