@@ -30,14 +30,6 @@ pipeline {
   }
 
   stages {
-    stage('Reset Permissions') {
-      steps {
-        sh 'sudo chown -R jenkins:jenkins .'
-      }
-    }
-
-
-
     stage('Resolve IDs & Login to ECR') {
       steps {
         script {
