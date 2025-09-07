@@ -47,7 +47,7 @@ describe('GET /api/product/list', () => {
         sortOrder: JSON.stringify({ created: -1 }),
         page: '1',
         limit: '10',
-        rating: JSON.stringify(0),                                  // avoid $gte: NaN
+        rating: JSON.stringify(0.00),                                  // avoid $gte: NaN
         priceRange: JSON.stringify({ min: 0, max: 999999 }), // avoid price: undefined
         category: category.slug,                         // ensure slug lookups succeed
         brand: brand.slug,
