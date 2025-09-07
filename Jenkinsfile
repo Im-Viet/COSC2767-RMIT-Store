@@ -105,11 +105,6 @@ pipeline {
       steps { sh 'aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"' }
     }
 
-    stage('Backend: Unit + Integration tests') {
-      steps { sh 'npm run test' }
-      post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
-    }
-
     stage('Apply k8s manifests (first time only)') {
       when { expression { return params.APPLY_MANIFESTS } }
       steps { sh 'kubectl -n "$NAMESPACE" apply -f "k8s/$NAMESPACE"' }
@@ -127,6 +122,11 @@ pipeline {
           kubectl -n "$NAMESPACE" rollout status deploy/frontend --timeout=180s
         '''
       }
+    }
+
+    stage('Backend: Unit + Integration tests') {
+      steps { sh 'npm run test' }
+      post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
     }
 
     stage('Compute E2E_BASE_URL') {

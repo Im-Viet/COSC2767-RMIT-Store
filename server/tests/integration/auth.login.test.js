@@ -7,7 +7,7 @@ const { ROLES } = require('../../constants');
 
 const app = buildTestApp();
 
-describe('POST /api/login', () => {
+describe('POST /api/auth/login', () => {
   const email = 'admin@example.com';
   const password = 'P@ssw0rd!';
 
@@ -26,7 +26,7 @@ describe('POST /api/login', () => {
 
   test('logs in with valid credentials', async () => {
     const res = await request(app)
-      .post('/api/login')
+      .post('/api/auth/login')
       .send({ email, password })
       .expect(200);
 
@@ -37,7 +37,7 @@ describe('POST /api/login', () => {
 
   test('rejects invalid password', async () => {
     const res = await request(app)
-      .post('/api/login')
+      .post('/api/auth/login')
       .send({ email, password: 'wrong' })
       .expect(400);
 
