@@ -134,7 +134,6 @@ pipeline {
 
           # Install Playwright browsers for CI (Chromium is enough for most suites)
           npx playwright install chromium
-          npx playwright install-deps chromium
         '''
       }
     }
