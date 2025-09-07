@@ -17,6 +17,10 @@ pipeline {
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
     booleanParam(name: 'SEED_DB',        defaultValue: false, description: 'Run seed job after deploy')
     booleanParam(name: 'RUN_NPM_INSTALL', defaultValue: true, description: 'Run npm ci for all packages before tests')
+    booleanParam(name: 'TESTS_IN_DOCKER',   defaultValue: true,  description: 'Run backend tests inside a Docker container')
+    booleanParam(name: 'SPIN_UP_TEST_DB',   defaultValue: false, description: 'Start a MongoDB container for integration tests')
+    string(      name: 'TEST_MONGO_IMAGE',  defaultValue: 'mongo:7', description: 'Mongo image for tests')
+    string(      name: 'TEST_MONGO_URI',    defaultValue: 'mongodb://mongo-test:27017/test', description: 'Mongo URI used by tests')
   }
 
   environment {
@@ -134,6 +138,54 @@ pipeline {
         '''
       }
     }
+
+    stage('Backend: Unit + Integration tests (Docker)') {
+      when { expression { return params.TESTS_IN_DOCKER } }
+      steps {
+        sh '''
+          set -euo pipefail
+
+          NET="ci-net-$BUILD_TAG"
+          docker network create "$NET" >/dev/null 2>&1 || true
+
+          cleanup() {
+            docker rm -f mongo-test >/dev/null 2>&1 || true
+            docker network rm "$NET" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          if [ "${SPIN_UP_TEST_DB}" = "true" ]; then
+            echo "Starting MongoDB for tests..."
+            docker run -d --name mongo-test --network "$NET" -e MONGO_INITDB_DATABASE=test "${TEST_MONGO_IMAGE}" >/dev/null
+            # wait for mongod to be ready
+            for i in $(seq 1 30); do
+              docker run --rm --network "$NET" "${TEST_MONGO_IMAGE}" mongosh --host mongo-test --eval 'db.adminCommand("ping")' >/dev/null 2>&1 && break || sleep 2
+            done
+            export TEST_MONGO_URI="${TEST_MONGO_URI}"
+          fi
+
+          echo "Running backend tests inside Node container..."
+          docker run --rm --network "$NET" --init \
+            -u $(id -u):$(id -g) \
+            -e HOME=/work \
+            -e NPM_CONFIG_CACHE=/work/.npm-cache \
+            -e NODE_ENV=test \
+            -e MONGO_URI="${TEST_MONGO_URI:-}" \
+            -v "$PWD/server":/work -w /work \
+            node:22-bullseye bash -lc '
+              mkdir -p .npm-cache
+              npm ci --no-audit --no-fund
+              npm run test
+            '
+        '''
+      }
+      post {
+        always {
+          junit allowEmptyResults: true, testResults: 'server/junit.xml'
+        }
+      }
+    }
+
 
     stage('Backend: Unit + Integration tests') {
       steps { sh 'npm run test' }
