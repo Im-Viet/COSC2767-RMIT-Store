@@ -125,13 +125,7 @@ pipeline {
     }
 
     stage('Backend: Unit + Integration tests') {
-      steps { 
-        sh '''
-          set -euxo pipefail
-          npm ci --prefix server --no-audit --no-fund
-          npm --prefix server run test
-        '''
-      }
+      steps { sh 'npm run test' }
       post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
     }
 
