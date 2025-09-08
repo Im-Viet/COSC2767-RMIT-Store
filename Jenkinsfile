@@ -15,7 +15,7 @@ pipeline {
     string(name: 'BACKEND_REPO', defaultValue: 'rmit-store/backend', description: 'Backend repository')
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'Frontend repository')
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
-    booleanParam(name: 'SEED_DB', defaultValue: false, description: 'Run seed job after deploy')
+    booleanParam(name: 'SEED_DB', defaultValue: true, description: 'Run seed job after deploy')
     booleanParam(name: 'PROMOTE', defaultValue: true, description: 'After tests pass, promote new color (blue-green flip)')
     booleanParam(name: 'KEEP_OLD_COLOR', defaultValue: false, description: 'If true, do not scale old color to 0')
   }
@@ -333,27 +333,34 @@ YAML
     stage('Seed database (from file)') {
       when { expression { return params.SEED_DB } }
       steps {
-        withCredentials([usernamePassword(credentialsId: 'seed-admin',
-                                          usernameVariable: 'SEED_ADMIN_EMAIL',
-                                          passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
-          sh '''
-            set -euo pipefail
+        script {
+          try {
+            withCredentials([usernamePassword(credentialsId: 'seed-admin',
+                                              usernameVariable: 'SEED_ADMIN_EMAIL',
+                                              passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
+              sh '''
+                set -euo pipefail
 
-            # Clean previous run (if any)
-            kubectl -n "$NAMESPACE" delete job/seed-db --ignore-not-found=true
+                # Clean previous run (if any)
+                kubectl -n "$NAMESPACE" delete job/seed-db --ignore-not-found=true
 
-            # Create/refresh a temporary Secret with admin creds
-            kubectl -n "$NAMESPACE" create secret generic seed-admin \
-              --from-literal=email="$SEED_ADMIN_EMAIL" \
-              --from-literal=password="$SEED_ADMIN_PASSWORD" \
-              --dry-run=client -o yaml | kubectl apply -f -
+                # Create/refresh a temporary Secret with admin creds
+                kubectl -n "$NAMESPACE" create secret generic seed-admin \
+                  --from-literal=email="$SEED_ADMIN_EMAIL" \
+                  --from-literal=password="$SEED_ADMIN_PASSWORD" \
+                  --dry-run=client -o yaml | kubectl apply -f -
 
-            # Substitute image into the checked-in Job file and apply it
-            sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/99-seed-db.yaml | kubectl -n "$NAMESPACE" apply -f -
+                # Substitute image into the checked-in Job file and apply it
+                sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/99-seed-db.yaml | kubectl -n "$NAMESPACE" apply -f -
 
-            kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db --timeout=180s || true
-            kubectl -n "$NAMESPACE" delete secret seed-admin --ignore-not-found=true
-          '''
+                kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db --timeout=180s || true
+                kubectl -n "$NAMESPACE" delete secret seed-admin --ignore-not-found=true
+              '''
+            }
+          } catch (Exception e) {
+            echo "Warning: Could not seed database - missing 'seed-admin' credentials or seeding failed: ${e.getMessage()}"
+            echo "Tests will run against empty database. Some tests may be skipped."
+          }
         }
       }
     }
