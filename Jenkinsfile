@@ -305,14 +305,14 @@ pipeline {
         sh '''
           set -euo pipefail
 
-          sed -e "s|dev.host|${DEV_HOSTNAME}|g" \
-          -e "s|lb.host|${INGRESS_LB_HOST}|g" k8s/web/40-ingress.yaml | kubectl -n web apply -f -
+          sed -e "s|dev.local|${DEV_HOSTNAME}|g" \
+          -e "s|lb.local|${INGRESS_LB_HOST}|g" k8s/web/40-ingress.yaml | kubectl -n web apply -f -
 
-          sed -e "s|prod.host|${PROD_HOSTNAME}|g" \
-          -e "s|lb.host|${INGRESS_LB_HOST}|g" k8s/prod/40-ingress.yaml | kubectl -n prod apply -f -
+          sed -e "s|prod.local|${PROD_HOSTNAME}|g" \
+          -e "s|lb.local|${INGRESS_LB_HOST}|g" k8s/prod/40-ingress.yaml | kubectl -n prod apply -f -
 
-          sed -e "s|prod.host|${PROD_HOSTNAME}|g" \
-          -e "s|lb.host|${INGRESS_LB_HOST}|g" \
+          sed -e "s|prod.local|${PROD_HOSTNAME}|g" \
+          -e "s|lb.local|${INGRESS_LB_HOST}|g" \
           -e "s|CANARY_WEIGHT|10|g" k8s/prod/45-ingress-canary.yaml | kubectl -n prod apply -f -
         '''
       }

@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: prod.host
+  - host: prod.local
     http:
       paths:
       - path: /api
@@ -18,7 +18,7 @@ spec:
       - path: /
         pathType: Prefix
         backend: { service: { name: frontend-svc-canary, port: { number: 8080 } } }
-  - host: lb.host
+  - host: lb.local
     http:
       paths:
       - path: /api
