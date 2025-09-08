@@ -208,6 +208,18 @@ YAML
       }
     }
 
+    stage('Blue-Green: in-cluster API smoke NEW color') {
+      steps {
+        sh '''
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
+          kubectl -n "$NAMESPACE" run smoke-api --restart=Never --image=curlimages/curl:8.7.1 -- \
+            sh -lc 'set -e; curl -fsS -i --max-time 15 http://backend-svc-${NEW_COLOR}:3000/api/product/list | head -n 30'
+          kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
+        '''
+      }
+    }
+
     stage('Blue-Green: create temp test ingress for NEW color') {
         steps {
           sh '''
@@ -228,7 +240,7 @@ spec:
   - http:
       paths:
       - path: /_${NEW_COLOR}/(?!api/)(.*)
-        pathType: ImplementationSpecific
+        pathType: Prefix
         backend:
           service:
             name: frontend-svc-${NEW_COLOR}
@@ -252,7 +264,7 @@ spec:
   - http:
       paths:
       - path: /_${NEW_COLOR}/api/(.*)
-        pathType: ImplementationSpecific
+        pathType: Prefix
         backend:
           service:
             name: backend-svc-${NEW_COLOR}
@@ -278,7 +290,7 @@ YAML
           curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/" | head -n 1
 
           echo "Hitting API product list..."
-          curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/product/list" >/dev/null
+          curl -fsS -i --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/product/list" | head -n 30
 
           echo "✅ External smoke for NEW color passed"
         '''
@@ -458,6 +470,9 @@ YAML
     failure {
       echo "Deployment failed - attempting rollback"
       sh '''
+        kubectl -n "$NAMESPACE" get pods -l app=backend,version="${NEW_COLOR}" -o name | head -n1 | xargs -r kubectl -n "$NAMESPACE" logs --tail=200 || true
+        kubectl -n "$NAMESPACE" scale deploy/frontend-${NEW_COLOR} --replicas=0 || true
+        kubectl -n "$NAMESPACE" scale deploy/backend-${NEW_COLOR}  --replicas=0 || true
         kubectl -n "$NAMESPACE" get deploy -o wide || true
         kubectl -n "$NAMESPACE" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'"${LIVE_COLOR}"'"}}}' || true
         kubectl -n "$NAMESPACE" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'"${LIVE_COLOR}"'"}}}' || true
