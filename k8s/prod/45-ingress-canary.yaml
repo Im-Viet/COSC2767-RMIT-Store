@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress-canary
+  namespace: prod
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "__CANARY_WEIGHT__"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: __PROD_HOST__
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-svc-canary
+            port: { number: 3000 }
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-svc-canary
+            port: { number: 8080 }

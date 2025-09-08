@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: prod
+  labels: { app: frontend, version: blue }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: frontend, version: blue } }
+  template:
+    metadata:
+      labels: { app: frontend, version: blue }
+    spec:
+      containers:
+      - name: frontend
+        image: REPLACE_ME_FRONTEND_IMAGE   # will be updated by Jenkins 'set image'
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: API_URL
+          valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8080"
