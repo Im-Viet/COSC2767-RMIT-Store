@@ -244,7 +244,7 @@ pipeline {
     }
 
     stage('Init Prod Manifests (first time only)') {
-      when { allOf { expression { currentBuild.currentResult == 'SUCCESS' }; expression { return params.APPLY_PROD_MANIFESTS } } }
+      when { allOf { expression { currentBuild.currentResult == 'SUCCESS' }, expression { return params.APPLY_PROD_MANIFESTS } } }
       steps {
         sh '''
           set -euo pipefail
@@ -264,10 +264,10 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          kubectl -n "$PROD_NAMESPACE" set image deploy/backend  backend="$BACKEND_IMAGE"   --record
+          kubectl -n "$PROD_NAMESPACE" set image deploy/backend backend="$BACKEND_IMAGE" --record
           kubectl -n "$PROD_NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE" --record
-          kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend  --timeout=300s
-          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend --timeout=300s
+          kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend --timeout=180s
+          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend --timeout=180s
         '''
       }
     }
