@@ -14,11 +14,11 @@ pipeline {
     string(name: 'K8S_NAMESPACE', defaultValue: 'web', description: 'Kubernetes namespace')
     string(name: 'BACKEND_REPO', defaultValue: 'rmit-store/backend', description: 'Backend repository')
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'Frontend repository')
-    booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
-    booleanParam(name: 'SEED_DB', defaultValue: false, description: 'Run seed job after deploy')
+    booleanParam(name: 'APPLY_MANIFESTS', defaultValue: true, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
+    booleanParam(name: 'SEED_DB', defaultValue: true, description: 'Run seed job after deploy')
     string(name: 'PROD_NAMESPACE', defaultValue: 'prod', description: 'Kubernetes namespace for production')
     string(name: 'CANARY_WEIGHT', defaultValue: '10', description: 'Initial canary traffic weight (0-100)')
-    booleanParam(name: 'APPLY_PROD_MANIFESTS', defaultValue: false, description: 'Apply k8s/prod manifests (first deploy to prod)')
+    booleanParam(name: 'APPLY_PROD_MANIFESTS', defaultValue: true, description: 'Apply k8s/prod manifests (first deploy to prod)')
 
   }
 
