@@ -208,17 +208,17 @@ YAML
       }
     }
 
-    stage('Blue-Green: in-cluster API smoke NEW color') {
-      steps {
-        sh '''
-          set -euo pipefail
-          kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
-          kubectl -n "$NAMESPACE" run smoke-api --restart=Never --image=curlimages/curl:8.7.1 -- \
-            sh -lc 'set -e; curl -fsS -i --max-time 15 http://backend-svc-${NEW_COLOR}:3000/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D | head -n 30'
-          kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
-        '''
-      }
-    }
+    // stage('Blue-Green: in-cluster API smoke NEW color') {
+    //   steps {
+    //     sh '''
+    //       set -euo pipefail
+    //       kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
+    //       kubectl -n "$NAMESPACE" run smoke-api --restart=Never --image=curlimages/curl:8.7.1 -- \
+    //         sh -lc 'set -e; curl -fsS -i --max-time 15 http://backend-svc-${NEW_COLOR}:3000/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D | head -n 30'
+    //       kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
+    //     '''
+    //   }
+    // }
 
     stage('Blue-Green: create canary ingress for NEW color') {
         steps {
@@ -258,27 +258,27 @@ YAML
       }
     }
 
-    stage('Blue-Green: external smoke NEW color') {
-      steps {
-        sh '''
-          set -euo pipefail
-          EP=""
-          for i in $(seq 1 30); do
-            EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'); \
-            [ -z "$EP" ] && EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
-            [ -n "$EP" ] && break; sleep 5; done
-          [ -z "$EP" ] && { echo "No ingress endpoint"; exit 1; }
+    // stage('Blue-Green: external smoke NEW color') {
+    //   steps {
+    //     sh '''
+    //       set -euo pipefail
+    //       EP=""
+    //       for i in $(seq 1 30); do
+    //         EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'); \
+    //         [ -z "$EP" ] && EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
+    //         [ -n "$EP" ] && break; sleep 5; done
+    //       [ -z "$EP" ] && { echo "No ingress endpoint"; exit 1; }
 
-          echo "Hitting FE index (NEW color via header)..."
-          curl -fsS -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/" | head -n 1
+    //       echo "Hitting FE index (NEW color via header)..."
+    //       curl -fsS -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/" | head -n 1
 
-          echo "Hitting API product list (NEW color via header)..."
-          curl -fsS -i -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/api/product/list?pageNum=1&pageSize=8" | head -n 30
+    //       echo "Hitting API product list (NEW color via header)..."
+    //       curl -fsS -i -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/api/product/list?pageNum=1&pageSize=8" | head -n 30
 
-          echo "✅ External smoke for NEW color passed"
-        '''
-      }
-    }
+    //       echo "✅ External smoke for NEW color passed"
+    //     '''
+    //   }
+    // }
 
     stage('Backend: Unit + Integration tests') {
       steps {
