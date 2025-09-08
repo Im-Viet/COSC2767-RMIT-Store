@@ -182,7 +182,7 @@ spec:
         - containerPort: 8080
         env:
         - name: API_URL
-          valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
+          valueFrom: "/_${NEW_COLOR}/api"   # idle color talks to idle color API via temp paths
         - name: HOST
           value: "0.0.0.0"
         - name: PORT
@@ -213,7 +213,7 @@ YAML
           sh '''
             set -euo pipefail
             # FRONTEND temp ingress: /_<color>/(... but NOT api/...) -> /$1 -> frontend-svc-<color>
-            cat <<'YAML' | envsubst | kubectl -n "$NAMESPACE" apply -f -
+            cat <<'YAML' | envsubst '${NEW_COLOR} ${NAMESPACE}' | kubectl -n "$NAMESPACE" apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -221,7 +221,7 @@ metadata:
   namespace: ${NAMESPACE}
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /\\$1
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
 spec:
   ingressClassName: nginx
   rules:
@@ -237,7 +237,7 @@ spec:
 YAML
 
             # API temp ingress: /_<color>/api/(...) -> /api/$1 -> backend-svc-<color>
-            cat <<'YAML' | envsubst | kubectl -n "$NAMESPACE" apply -f -
+            cat <<'YAML' | envsubst '${NEW_COLOR} ${NAMESPACE}' | kubectl -n "$NAMESPACE" apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -245,7 +245,7 @@ metadata:
   namespace: ${NAMESPACE}
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /api/\\$1
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$1
 spec:
   ingressClassName: nginx
   rules:
@@ -277,8 +277,8 @@ YAML
           echo "Hitting FE index..."
           curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/" | head -n 1
 
-          echo "Hitting API brand list..."
-          curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/brand/list" >/dev/null
+          echo "Hitting API product list..."
+          curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/product/list" >/dev/null
 
           echo "✅ External smoke for NEW color passed"
         '''
