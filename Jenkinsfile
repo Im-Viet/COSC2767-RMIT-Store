@@ -148,6 +148,20 @@ spec:
           valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
         - name: CLIENT_URL
           valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
+        readinessProbe:
+          httpGet:
+            path: /api/product/list
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /api/product/list
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
@@ -187,6 +201,20 @@ spec:
           value: "0.0.0.0"
         - name: PORT
           value: "8080"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
@@ -240,6 +268,22 @@ spec:
             port:
               number: 3000
 YAML
+        '''
+      }
+    }
+
+    stage('Wait for ingress to be ready') {
+      steps {
+        sh '''
+          echo "Waiting for ingress to propagate and pods to be fully ready..."
+          sleep 30
+          
+          echo "Checking if all pods are ready..."
+          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=backend,version=${NEW_COLOR} --timeout=120s
+          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=frontend,version=${NEW_COLOR} --timeout=120s
+          
+          echo "All pods are ready. Waiting additional time for load balancer to register endpoints..."
+          sleep 15
         '''
       }
     }
@@ -315,6 +359,55 @@ YAML
           env.E2E_BASE_URL = "http://${ep}:8080/_${env.NEW_COLOR}/"
           echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
         }
+      }
+    }
+
+    stage('Diagnostic: Check application accessibility') {
+      steps {
+        sh '''
+          set -euo pipefail
+          
+          echo "=== Checking pod status ==="
+          kubectl -n "$NAMESPACE" get pods -l version=${NEW_COLOR} -o wide
+          
+          echo "=== Checking service endpoints ==="
+          kubectl -n "$NAMESPACE" get svc -l app=frontend -o wide
+          kubectl -n "$NAMESPACE" get svc -l app=backend -o wide
+          
+          echo "=== Checking ingress status ==="
+          kubectl -n "$NAMESPACE" get ingress app-ingress-${NEW_COLOR}-test -o wide
+          kubectl -n "$NAMESPACE" describe ingress app-ingress-${NEW_COLOR}-test
+          
+          echo "=== Testing direct pod connectivity ==="
+          FRONTEND_POD=$(kubectl -n "$NAMESPACE" get pod -l app=frontend,version=${NEW_COLOR} -o jsonpath='{.items[0].metadata.name}')
+          BACKEND_POD=$(kubectl -n "$NAMESPACE" get pod -l app=backend,version=${NEW_COLOR} -o jsonpath='{.items[0].metadata.name}')
+          
+          echo "Frontend pod: $FRONTEND_POD"
+          echo "Backend pod: $BACKEND_POD"
+          
+          # Test backend health
+          echo "=== Testing backend health ==="
+          kubectl -n "$NAMESPACE" exec $BACKEND_POD -- curl -f http://localhost:3000/api/product/list || echo "Backend health check failed"
+          
+          # Test frontend response
+          echo "=== Testing frontend response ==="
+          kubectl -n "$NAMESPACE" exec $FRONTEND_POD -- curl -f http://localhost:8080/ || echo "Frontend health check failed"
+          
+          echo "=== Testing external URL accessibility ==="
+          echo "E2E_BASE_URL: ${E2E_BASE_URL}"
+          
+          # Extract hostname from E2E_BASE_URL
+          HOSTNAME=$(echo "${E2E_BASE_URL}" | sed 's|http://||' | sed 's|:.*||')
+          echo "Testing connectivity to: $HOSTNAME"
+          
+          # Test if we can reach the load balancer
+          curl -f --max-time 10 "http://$HOSTNAME:8080/" || echo "Direct load balancer access failed"
+          
+          # Test the specific E2E URL path
+          curl -f --max-time 10 "${E2E_BASE_URL}" || echo "E2E URL access failed"
+          
+          echo "=== Diagnostic complete ==="
+        '''
       }
     }
 
