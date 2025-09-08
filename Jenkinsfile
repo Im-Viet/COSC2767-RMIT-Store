@@ -19,7 +19,9 @@ pipeline {
     string(name: 'PROD_NAMESPACE', defaultValue: 'prod', description: 'Kubernetes namespace for production')
     string(name: 'CANARY_WEIGHT', defaultValue: '10', description: 'Initial canary traffic weight (0-100)')
     booleanParam(name: 'APPLY_PROD_MANIFESTS', defaultValue: true, description: 'Apply k8s/prod manifests (first deploy to prod)')
-    // booleanParam(name: 'BOOTSTRAP_PROD_BLUE', defaultValue: true, description: 'Set blue (stable) images on first prod deployment')
+    string(name: 'DEV_HOSTNAME',  defaultValue: 'dev.local',  description: 'Dev host used in Ingress')
+    string(name: 'PROD_HOSTNAME', defaultValue: 'prod.local', description: 'Prod host used in Ingress/Canary')
+    booleanParam(name: 'BOOTSTRAP_PROD_BLUE', defaultValue: true, description: 'Set blue (stable) images on first prod deployment')
   }
 
   environment {
@@ -163,8 +165,22 @@ pipeline {
           if (!ep) {
             ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
           }
-          env.E2E_BASE_URL = "http://${ep}:8080"
+          env.E2E_BASE_URL = "http://${params.DEV_HOSTNAME}:8080"
           echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
+        }
+      }
+    }
+
+    stage('Compute Ingress LB host/IP') {
+      steps {
+        script {
+          env.INGRESS_LB_HOST = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
+          // Try getent first, fall back to dig
+          env.INGRESS_LB_IP = sh(
+            script: "getent hosts ${env.INGRESS_LB_HOST} | awk '{print \$1}' | head -n1 || dig +short ${env.INGRESS_LB_HOST} | head -n1",
+            returnStdout: true
+          ).trim()
+          echo "LB Host: ${env.INGRESS_LB_HOST}, LB IP: ${env.INGRESS_LB_IP}"
         }
       }
     }
@@ -205,6 +221,7 @@ pipeline {
           docker run --rm \
             --shm-size=1g \
             -u $(id -u):$(id -g) \
+            --add-host ${DEV_HOSTNAME}:${env.INGRESS_LB_IP} \
             -e HOME=/work \
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
@@ -242,21 +259,18 @@ pipeline {
       }
     }
 
-    // stage('Bootstrap Prod Blue Images (one time)') {
-    //   when { allOf { expression { currentBuild.currentResult == 'SUCCESS' }; expression { return params.BOOTSTRAP_PROD_BLUE } } }
-    //   steps {
-    //     sh '''
-    //       set -euo pipefail
-    //       # Set images for stable (blue) deploys so 90% traffic is healthy during canary
-    //       kubectl -n "$PROD_NAMESPACE" set image deploy/backend  backend="$BACKEND_IMAGE"   --record
-    //       kubectl -n "$PROD_NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE" --record
-
-    //       # Wait for blue to be healthy
-    //       kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend  --timeout=300s
-    //       kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend --timeout=300s
-    //     '''
-    //   }
-    // }
+    stage('Bootstrap Prod Blue Images (one time)') {
+      when { allOf { expression { currentBuild.currentResult == 'SUCCESS' }, expression { return params.BOOTSTRAP_PROD_BLUE } } }
+      steps {
+        sh '''
+          set -euo pipefail
+          kubectl -n "$PROD_NAMESPACE" set image deploy/backend  backend="$BACKEND_IMAGE"   --record
+          kubectl -n "$PROD_NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE" --record
+          kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend  --timeout=300s
+          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend --timeout=300s
+        '''
+      }
+    }
 
     stage('Compute PROD_HOST & PROD_BASE_URL') {
       when { expression { currentBuild.currentResult == 'SUCCESS' } }
@@ -266,7 +280,7 @@ pipeline {
           if (!ep) {
             ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
           }
-          env.PROD_HOST = ep                    // ✅ just the ELB hostname/IP
+          env.PROD_HOST = params.PROD_HOSTNAME                    // ✅ just the ELB hostname/IP
           env.PROD_BASE_URL = "http://${env.PROD_HOST}:8080"
           echo "PROD_BASE_URL=${env.PROD_BASE_URL}"
         }
@@ -279,6 +293,8 @@ pipeline {
         sh '''
           set -euo pipefail
           sed "s|__PROD_HOST__|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NAMESPACE" apply -f -
+          sed -e "s|__PROD_HOST__|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" \
+            k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NAMESPACE" apply -f -
         '''
       }
     }
@@ -349,10 +365,11 @@ YAML
     stage('Validate Canary (Prod)') {
       when { expression { currentBuild.currentResult == 'SUCCESS' } }
       steps {
-        sh 'curl -fsS "$PROD_BASE_URL/" -I || true'
+        sh 'curl -fsS -H "Host: ${PROD_HOST}" "http://${INGRESS_LB_HOST}:8080/" -I || true'
         sh '''
           docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
           docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
+            --add-host ${PROD_HOST}:${env.INGRESS_LB_IP} \
             -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e E2E_BASE_URL="${PROD_BASE_URL}" \

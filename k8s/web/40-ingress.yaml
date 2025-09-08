@@ -6,17 +6,18 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - http:
+  - host: dev.local
+    http:
       paths:
       - path: /api
         pathType: Prefix
         backend:
           service:
-            name: backend-svc      # ⬅️ sends /api to backend
+            name: backend-svc
             port: { number: 3000 }
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: frontend-svc     # ⬅️ everything else to frontend
+            name: frontend-svc
             port: { number: 8080 }
