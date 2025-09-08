@@ -212,7 +212,7 @@ YAML
         steps {
           sh '''
             set -euo pipefail
-            # FRONTEND temp ingress: /_<color>/(...) -> /$1 -> frontend-svc-<color>
+            # FRONTEND temp ingress: /_<color>/(... but NOT api/...) -> /$1 -> frontend-svc-<color>
             cat <<'YAML' | envsubst | kubectl -n "$NAMESPACE" apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -227,7 +227,7 @@ spec:
   rules:
   - http:
       paths:
-      - path: /_${NEW_COLOR}/(.*)
+      - path: /_${NEW_COLOR}/(?!api/)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
@@ -260,6 +260,28 @@ spec:
               number: 3000
 YAML
           '''
+      }
+    }
+
+    stage('Blue-Green: external smoke NEW color') {
+      steps {
+        sh '''
+          set -euo pipefail
+          EP=""
+          for i in $(seq 1 30); do
+            EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'); \
+            [ -z "$EP" ] && EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
+            [ -n "$EP" ] && break; sleep 5; done
+          [ -z "$EP" ] && { echo "No ingress endpoint"; exit 1; }
+
+          echo "Hitting FE index..."
+          curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/" | head -n 1
+
+          echo "Hitting API brand list..."
+          curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/brand/list" >/dev/null
+
+          echo "✅ External smoke for NEW color passed"
+        '''
       }
     }
 
