@@ -287,6 +287,7 @@ spec:
       containers:
       - name: backend
         image: "$BACKEND_IMAGE"
+        imagePullPolicy: IfNotPresent
         ports: [ { containerPort: 3000 } ]
         env:
         - { name: PORT, value: "3000" }
@@ -308,6 +309,7 @@ spec:
       containers:
       - name: frontend
         image: "$FRONTEND_IMAGE"
+        imagePullPolicy: IfNotPresent
         ports: [ { containerPort: 8080 } ]
         env:
         - name: API_URL
