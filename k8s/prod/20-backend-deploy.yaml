@@ -26,6 +26,3 @@ spec:
           valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
         - name: CLIENT_URL
           valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
-        - name: JWT_SECRET
-          valueFrom: { secretKeyRef: { name: app-secrets, key: JWT_SECRET } }
-          

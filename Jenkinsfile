@@ -274,7 +274,7 @@ pipeline {
           set -euo pipefail
 
           # GREEN deployments (new images)
-          cat <<'YAML' | kubectl -n "$PROD_NAMESPACE" apply -f -
+          cat <<YAML | kubectl -n "$PROD_NAMESPACE" apply -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: backend-green, labels: { app: backend, version: green } }
@@ -287,7 +287,6 @@ spec:
       containers:
       - name: backend
         image: "$BACKEND_IMAGE"
-        imagePullPolicy: Always
         ports: [ { containerPort: 3000 } ]
         env:
         - { name: PORT, value: "3000" }
@@ -296,8 +295,6 @@ spec:
           valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
         - name: CLIENT_URL
           valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
-        - name: JWT_SECRET
-          valueFrom: { secretKeyRef: { name: app-secrets, key: JWT_SECRET } }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -311,7 +308,6 @@ spec:
       containers:
       - name: frontend
         image: "$FRONTEND_IMAGE"
-        imagePullPolicy: Always
         ports: [ { containerPort: 8080 } ]
         env:
         - name: API_URL
