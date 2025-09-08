@@ -16,7 +16,6 @@ pipeline {
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'Frontend repository')
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
     booleanParam(name: 'SEED_DB',        defaultValue: false, description: 'Run seed job after deploy')
-    booleanParam(name: 'RUN_NPM_INSTALL', defaultValue: true, description: 'Run npm ci for all packages before tests')
   }
 
   environment {
@@ -220,7 +219,7 @@ pipeline {
 
     stage('Show endpoints') {
       steps {
-        sh ' echo "You can test: ${E2E_BASE_URL} "'
+        echo "You can test: ${E2E_BASE_URL}"
       }
     }
 
@@ -232,7 +231,7 @@ pipeline {
 
   post {
     failure {
-      echo "Deployment failed – attempting rollback"
+      echo "Deployment failed - attempting rollback"
       sh '''
         kubectl -n "$NAMESPACE" rollout undo deploy/backend || true
         kubectl -n "$NAMESPACE" rollout undo deploy/frontend || true
