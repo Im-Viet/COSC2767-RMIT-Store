@@ -221,7 +221,7 @@ pipeline {
           docker run --rm \
             --shm-size=1g \
             -u $(id -u):$(id -g) \
-            --add-host ${DEV_HOSTNAME}:${env.INGRESS_LB_IP} \
+            --add-host ${params.DEV_HOSTNAME}:${env.INGRESS_LB_IP} \
             -e HOME=/work \
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
@@ -379,7 +379,7 @@ YAML
         sh '''
           docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
           docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
-            --add-host ${PROD_HOST}:${env.INGRESS_LB_IP} \
+            --add-host ${params.PROD_HOST}:${env.INGRESS_LB_IP} \
             -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e E2E_BASE_URL="${PROD_BASE_URL}" \
