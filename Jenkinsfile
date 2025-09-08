@@ -182,7 +182,7 @@ spec:
         - containerPort: 8080
         env:
         - name: API_URL
-          value: "/_${NEW_COLOR}/api"   # idle color talks to idle color API via temp paths
+          value: "/api"   # idle color talks to idle color API via temp paths
         - name: HOST
           value: "0.0.0.0"
         - name: PORT
@@ -220,56 +220,39 @@ YAML
       }
     }
 
-    stage('Blue-Green: create temp test ingress for NEW color') {
+    stage('Blue-Green: create canary ingress for NEW color') {
         steps {
           sh '''
             set -euo pipefail
-            # FRONTEND temp ingress: /_<color>/(... but NOT api/...) -> /$1 -> frontend-svc-<color>
             cat <<'YAML' | envsubst '${NEW_COLOR} ${NAMESPACE}' | kubectl -n "$NAMESPACE" apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: app-ingress-${NEW_COLOR}-fe-test
+  name: app-ingress-canary
   namespace: ${NAMESPACE}
   annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Color"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "${NEW_COLOR}"
 spec:
   ingressClassName: nginx
   rules:
   - http:
       paths:
-      - path: /_${NEW_COLOR}/(?!api/)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: frontend-svc-${NEW_COLOR}
-            port:
-              number: 8080
-YAML
-
-            # API temp ingress: /_<color>/api/(...) -> /api/$1 -> backend-svc-<color>
-            cat <<'YAML' | envsubst '${NEW_COLOR} ${NAMESPACE}' | kubectl -n "$NAMESPACE" apply -f -
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: app-ingress-${NEW_COLOR}-api-test
-  namespace: ${NAMESPACE}
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /api/$1
-spec:
-  ingressClassName: nginx
-  rules:
-  - http:
-      paths:
-      - path: /_${NEW_COLOR}/api/(.*)
-        pathType: ImplementationSpecific
+      - path: /api
+        pathType: Prefix
         backend:
           service:
             name: backend-svc-${NEW_COLOR}
             port:
               number: 3000
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-svc-${NEW_COLOR}
+            port:
+              number: 8080
 YAML
           '''
       }
@@ -286,11 +269,11 @@ YAML
             [ -n "$EP" ] && break; sleep 5; done
           [ -z "$EP" ] && { echo "No ingress endpoint"; exit 1; }
 
-          echo "Hitting FE index..."
-          curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/" | head -n 1
+          echo "Hitting FE index (NEW color via header)..."
+          curl -fsS -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/" | head -n 1
 
-          echo "Hitting API product list..."
-          curl -fsS -i --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D" | head -n 30
+          echo "Hitting API product list (NEW color via header)..."
+          curl -fsS -i -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D" | head -n 30
 
           echo "✅ External smoke for NEW color passed"
         '''
@@ -365,7 +348,7 @@ YAML
           if (!ep) {
             ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
           }
-          env.E2E_BASE_URL = "http://${ep}:8080/_${env.NEW_COLOR}/"
+          env.E2E_BASE_URL = "http://${ep}:8080/"
           echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
         }
       }
@@ -375,6 +358,18 @@ YAML
       steps {
         sh '''
           set -euo pipefail
+          cat > e2e.playwright.config.cjs <<'JS'
+          /** Ephemeral config injected by Jenkins to route all requests to the NEW color via header */
+          module.exports = {
+            use: {
+              baseURL: process.env.E2E_BASE_URL,
+              extraHTTPHeaders: { 'X-Color': process.env.NEW_COLOR },
+              // Trace on retry can help debugging first-load issues
+              // trace: 'on-first-retry',
+              // timeout: 90000,
+            },
+          };
+          JS
           docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
           docker run --rm \
             --shm-size=1g \
@@ -383,13 +378,13 @@ YAML
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e E2E_BASE_URL="${E2E_BASE_URL}" \
+            -e NEW_COLOR="${NEW_COLOR}" \
             -v "$PWD":/work -w /work \
             mcr.microsoft.com/playwright:v1.55.0-jammy \
             bash -lc '
               mkdir -p .npm-cache
               npm ci --no-audit --no-fund
-              # Browsers are already baked into the image via /ms-playwright
-              npx playwright test --reporter=html --trace=on-first-retry
+              npx playwright test -c e2e.playwright.config.cjs --reporter=html
             '
         '''
       }
@@ -447,17 +442,12 @@ YAML
       }
     }
 
-    stage('Cleanup test ingress') {
-      steps {
-        sh '''
-          kubectl -n "$NAMESPACE" delete ingress app-ingress-${NEW_COLOR}-fe-test  --ignore-not-found=true
-          kubectl -n "$NAMESPACE" delete ingress app-ingress-${NEW_COLOR}-api-test --ignore-not-found=true
-        '''
-      }
+    stage('Cleanup canary ingress') {
+      steps { sh 'kubectl -n "$NAMESPACE" delete ingress app-ingress-canary --ignore-not-found=true' }
     }
 
     stage('Show endpoints') {
-      steps { echo "You can test the website in: ${E2E_BASE_URL}" }
+      steps { echo "You can test the website at (NEW color via header): ${E2E_BASE_URL}  (send header X-Color=${NEW_COLOR})" }
     }
 
     stage('Promote to Prod') {
