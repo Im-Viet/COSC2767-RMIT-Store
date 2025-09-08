@@ -32,6 +32,8 @@ pipeline {
     FRONTEND_REPO = "${params.FRONTEND_REPO}"
     PROD_NAMESPACE = "${params.PROD_NAMESPACE}"
     CANARY_WEIGHT = "${params.CANARY_WEIGHT}"
+    DEV_HOSTNAME = "${params.DEV_HOSTNAME}"
+    PROD_HOSTNAME = "${params.PROD_HOSTNAME}"
     NPM_CONFIG_CACHE = "${JENKINS_HOME}/.npm-cache"
     PLAYWRIGHT_BROWSERS_PATH = "${JENKINS_HOME}/.cache/ms-playwright"
     DOCKER_BUILDKIT = "1"
@@ -221,7 +223,7 @@ pipeline {
           docker run --rm \
             --shm-size=1g \
             -u $(id -u):$(id -g) \
-            --add-host ${params.DEV_HOSTNAME}:${env.INGRESS_LB_IP} \
+            --add-host ${DEV_HOSTNAME}:${INGRESS_LB_IP} \
             -e HOME=/work \
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
@@ -379,7 +381,7 @@ YAML
         sh '''
           docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
           docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
-            --add-host ${params.PROD_HOST}:${env.INGRESS_LB_IP} \
+            --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
             -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e E2E_BASE_URL="${PROD_BASE_URL}" \
