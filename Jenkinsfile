@@ -16,8 +16,6 @@ pipeline {
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'Frontend repository')
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
     booleanParam(name: 'SEED_DB', defaultValue: false, description: 'Run seed job after deploy')
-    booleanParam(name: 'PROMOTE', defaultValue: true, description: 'After tests pass, promote new color (blue-green flip)')
-    booleanParam(name: 'KEEP_OLD_COLOR', defaultValue: false, description: 'If true, do not scale old color to 0')
   }
 
   environment {
@@ -105,180 +103,19 @@ pipeline {
       steps { sh 'kubectl -n "$NAMESPACE" apply -f "k8s/$NAMESPACE"' }
     }
 
-    stage('Blue-Green: plan color') {
-      steps {
-        script {
-          def live = sh(script: 'kubectl -n "$NAMESPACE" get svc frontend-svc -o jsonpath="{.spec.selector.version}" || echo blue', returnStdout: true).trim()
-          env.LIVE_COLOR = live ?: "blue"
-          env.NEW_COLOR  = (env.LIVE_COLOR == "blue") ? "green" : "blue"
-          echo "LIVE_COLOR=${env.LIVE_COLOR}; NEW_COLOR=${env.NEW_COLOR}"
-        }
-      }
-    }
-
-    stage('Blue-Green: deploy NEW color (no traffic)') {
+    stage('Deploy new images') {
       steps {
         sh '''
-          set -euo pipefail
-          cat <<YAML | kubectl -n "$NAMESPACE" apply -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: backend-${NEW_COLOR}
-  namespace: ${NAMESPACE}
-  labels: { app: backend, version: ${NEW_COLOR} }
-spec:
-  replicas: 1
-  selector: { matchLabels: { app: backend, version: ${NEW_COLOR} } }
-  template:
-    metadata:
-      labels: { app: backend, version: ${NEW_COLOR} }
-    spec:
-      containers:
-      - name: backend
-        image: ${BACKEND_IMAGE}
-        ports:
-        - containerPort: 3000
-        env:
-        - name: PORT
-          value: "3000"
-        - name: BASE_API_URL
-          value: "api"
-        - name: MONGO_URI
-          valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
-        - name: CLIENT_URL
-          valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: backend-svc-${NEW_COLOR}
-  namespace: ${NAMESPACE}
-  labels: { app: backend }
-spec:
-  type: ClusterIP
-  selector: { app: backend, version: ${NEW_COLOR} }
-  ports:
-  - port: 3000
-    targetPort: 3000
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: frontend-${NEW_COLOR}
-  namespace: ${NAMESPACE}
-  labels: { app: frontend, version: ${NEW_COLOR} }
-spec:
-  replicas: 1
-  selector: { matchLabels: { app: frontend, version: ${NEW_COLOR} } }
-  template:
-    metadata:
-      labels: { app: frontend, version: ${NEW_COLOR} }
-    spec:
-      containers:
-      - name: frontend
-        image: ${FRONTEND_IMAGE}
-        ports:
-        - containerPort: 8080
-        env:
-        - name: API_URL
-          value: "/api"   # idle color talks to idle color API via temp paths
-        - name: HOST
-          value: "0.0.0.0"
-        - name: PORT
-          value: "8080"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: frontend-svc-${NEW_COLOR}
-  namespace: ${NAMESPACE}
-  labels: { app: frontend }
-spec:
-  type: ClusterIP
-  selector: { app: frontend, version: ${NEW_COLOR} }
-  ports:
-  - port: 8080
-    targetPort: 8080
-YAML
+          # update Deployments to the freshly pushed images
+          kubectl -n "$NAMESPACE" set image deploy/backend backend="$BACKEND_IMAGE"
+          kubectl -n "$NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE"
 
-          kubectl -n "$NAMESPACE" rollout status deploy/backend-${NEW_COLOR}  --timeout=180s
-          kubectl -n "$NAMESPACE" rollout status deploy/frontend-${NEW_COLOR} --timeout=180s
+          # wait for rollouts
+          kubectl -n "$NAMESPACE" rollout status deploy/backend --timeout=180s
+          kubectl -n "$NAMESPACE" rollout status deploy/frontend --timeout=180s
         '''
       }
     }
-
-    // stage('Blue-Green: in-cluster API smoke NEW color') {
-    //   steps {
-    //     sh '''
-    //       set -euo pipefail
-    //       kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
-    //       kubectl -n "$NAMESPACE" run smoke-api --restart=Never --image=curlimages/curl:8.7.1 -- \
-    //         sh -lc 'set -e; curl -fsS -i --max-time 15 http://backend-svc-${NEW_COLOR}:3000/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D | head -n 30'
-    //       kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
-    //     '''
-    //   }
-    // }
-
-    stage('Blue-Green: create canary ingress for NEW color') {
-        steps {
-          sh '''
-            set -euo pipefail
-            cat <<'YAML' | envsubst '${NEW_COLOR} ${NAMESPACE}' | kubectl -n "$NAMESPACE" apply -f -
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: app-ingress-canary
-  namespace: ${NAMESPACE}
-  annotations:
-    nginx.ingress.kubernetes.io/canary: "true"
-    nginx.ingress.kubernetes.io/canary-by-header: "X-Color"
-    nginx.ingress.kubernetes.io/canary-by-header-value: "${NEW_COLOR}"
-spec:
-  ingressClassName: nginx
-  rules:
-  - http:
-      paths:
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: backend-svc-${NEW_COLOR}
-            port:
-              number: 3000
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: frontend-svc-${NEW_COLOR}
-            port:
-              number: 8080
-YAML
-          '''
-      }
-    }
-
-    // stage('Blue-Green: external smoke NEW color') {
-    //   steps {
-    //     sh '''
-    //       set -euo pipefail
-    //       EP=""
-    //       for i in $(seq 1 30); do
-    //         EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'); \
-    //         [ -z "$EP" ] && EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
-    //         [ -n "$EP" ] && break; sleep 5; done
-    //       [ -z "$EP" ] && { echo "No ingress endpoint"; exit 1; }
-
-    //       echo "Hitting FE index (NEW color via header)..."
-    //       curl -fsS -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/" | head -n 1
-
-    //       echo "Hitting API product list (NEW color via header)..."
-    //       curl -fsS -i -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/api/product/list?pageNum=1&pageSize=8" | head -n 30
-
-    //       echo "✅ External smoke for NEW color passed"
-    //     '''
-    //   }
-    // }
 
     stage('Backend: Unit + Integration tests') {
       steps {
@@ -313,6 +150,19 @@ YAML
       post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
     }
 
+    stage('Compute E2E_BASE_URL') {
+      steps {
+        script {
+          def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
+          if (!ep) {
+            ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
+          }
+          env.E2E_BASE_URL = "http://${ep}:8080"
+          echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
+        }
+      }
+    }
+
     stage('Seed database (from file)') {
       when { expression { return params.SEED_DB } }
       steps {
@@ -341,35 +191,10 @@ YAML
       }
     }
 
-    stage('Set E2E_BASE_URL') {
-      steps {
-        script {
-          def ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'", returnStdout: true).trim()
-          if (!ep) {
-            ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
-          }
-          env.E2E_BASE_URL = "http://${ep}:8080/"
-          echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
-        }
-      }
-    }
-
-    stage('Web UI E2E (Playwright) against NEW color') {
+    stage('Web UI E2E (Playwright)') {
       steps {
         sh '''
           set -euo pipefail
-          cat > e2e.playwright.config.cjs <<'JS'
-          /** Ephemeral config injected by Jenkins to route all requests to the NEW color via header */
-          module.exports = {
-            use: {
-              baseURL: process.env.E2E_BASE_URL,
-              extraHTTPHeaders: { 'X-Color': process.env.NEW_COLOR },
-              // Trace on retry can help debugging first-load issues
-              // trace: 'on-first-retry',
-              // timeout: 90000,
-            },
-          };
-          JS
           docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
           docker run --rm \
             --shm-size=1g \
@@ -378,76 +203,21 @@ YAML
             -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e E2E_BASE_URL="${E2E_BASE_URL}" \
-            -e NEW_COLOR="${NEW_COLOR}" \
             -v "$PWD":/work -w /work \
             mcr.microsoft.com/playwright:v1.55.0-jammy \
             bash -lc '
               mkdir -p .npm-cache
               npm ci --no-audit --no-fund
-              npx playwright test -c e2e.playwright.config.cjs --reporter=html
+              npm run test:e2e
             '
         '''
       }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
 
-    stage('Blue-Green: switch traffic to NEW color') {
-      when { expression { return params.PROMOTE } }
-      steps {
-        sh '''
-          set -euo pipefail
-          kubectl -n "$NAMESPACE" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'"${NEW_COLOR}"'"}}}'
-          kubectl -n "$NAMESPACE" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'"${NEW_COLOR}"'"}}}'
-        '''
-      }
-    }
-
-    stage('Normalize API_URL after switch') {
-      steps {
-        sh '''
-          set -euo pipefail
-          kubectl -n "$NAMESPACE" set env deploy/frontend-${NEW_COLOR} API_URL="/api"
-          kubectl -n "$NAMESPACE" rollout status deploy/frontend-${NEW_COLOR} --timeout=180s
-        '''
-      }
-    }
-
-    stage('Prod verify via Ingress') {
-      when { expression { return params.PROMOTE } }
-      steps {
-        sh '''
-          set -euo pipefail
-          EP=""
-          for i in $(seq 1 30); do
-            EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'); \
-            [ -z "$EP" ] && EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
-            [ -n "$EP" ] && break; sleep 5; done
-          [ -z "$EP" ] && { echo "No ingress endpoint"; exit 1; }
-
-          curl -fsS --max-time 15 "http://$EP:8080/" >/dev/null
-          curl -fsS --max-time 15 "http://$EP:8080/shop" >/dev/null
-          echo "Production is serving ${NEW_COLOR}"
-        '''
-      }
-    }
-
-    stage('Blue-Green: tidy old color') {
-      when { expression { return !params.KEEP_OLD_COLOR } }
-      steps {
-        sh '''
-          set -euo pipefail
-          kubectl -n "$NAMESPACE" scale deploy/backend-${LIVE_COLOR}  --replicas=0 || true
-          kubectl -n "$NAMESPACE" scale deploy/frontend-${LIVE_COLOR} --replicas=0 || true
-        '''
-      }
-    }
-
-    stage('Cleanup canary ingress') {
-      steps { sh 'kubectl -n "$NAMESPACE" delete ingress app-ingress-canary --ignore-not-found=true' }
-    }
 
     stage('Show endpoints') {
-      steps { echo "You can test the website at (NEW color via header): ${E2E_BASE_URL}  (send header X-Color=${NEW_COLOR})" }
+      steps { echo "You can test the website at: ${E2E_BASE_URL}" }
     }
 
     stage('Promote to Prod') {
@@ -460,12 +230,9 @@ YAML
     failure {
       echo "Deployment failed - attempting rollback"
       sh '''
-        kubectl -n "$NAMESPACE" get pods -l app=backend,version="${NEW_COLOR}" -o name | head -n1 | xargs -r kubectl -n "$NAMESPACE" logs --tail=200 || true
-        kubectl -n "$NAMESPACE" scale deploy/frontend-${NEW_COLOR} --replicas=0 || true
-        kubectl -n "$NAMESPACE" scale deploy/backend-${NEW_COLOR}  --replicas=0 || true
+        kubectl -n "$NAMESPACE" rollout undo deploy/backend || true
+        kubectl -n "$NAMESPACE" rollout undo deploy/frontend || true
         kubectl -n "$NAMESPACE" get deploy -o wide || true
-        kubectl -n "$NAMESPACE" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'"${LIVE_COLOR}"'"}}}' || true
-        kubectl -n "$NAMESPACE" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'"${LIVE_COLOR}"'"}}}' || true
       '''
       emailext(
         subject: "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
