@@ -200,7 +200,7 @@ spec:
   ports:
   - port: 8080
     targetPort: 8080
-          YAML
+YAML
 
           kubectl -n "$NAMESPACE" rollout status deploy/backend-${NEW_COLOR}  --timeout=180s
           kubectl -n "$NAMESPACE" rollout status deploy/frontend-${NEW_COLOR} --timeout=180s
@@ -213,33 +213,33 @@ spec:
         sh '''
           set -euo pipefail
           cat <<YAML | kubectl -n "$NAMESPACE" apply -f -
-          apiVersion: networking.k8s.io/v1
-          kind: Ingress
-          metadata:
-            name: app-ingress-${NEW_COLOR}-test
-            annotations:
-              nginx.ingress.kubernetes.io/use-regex: "true"
-              nginx.ingress.kubernetes.io/rewrite-target: /$1
-          spec:
-            ingressClassName: nginx
-            rules:
-            - http:
-                paths:
-                - path: /_${NEW_COLOR}/(.*)
-                  pathType: Prefix
-                  backend:
-                    service:
-                      name: frontend-svc-${NEW_COLOR}
-                      port:
-                        number: 8080
-                - path: /_${NEW_COLOR}/api/?(.*)
-                  pathType: Prefix
-                  backend:
-                    service:
-                      name: backend-svc-${NEW_COLOR}
-                      port:
-                        number: 3000
-          YAML
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress-${NEW_COLOR}-test
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /_${NEW_COLOR}/(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-svc-${NEW_COLOR}
+            port:
+              number: 8080
+      - path: /_${NEW_COLOR}/api/?(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-svc-${NEW_COLOR}
+            port:
+              number: 3000
+YAML
         '''
       }
     }
