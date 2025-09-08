@@ -226,14 +226,14 @@ spec:
   - http:
       paths:
       - path: /_${NEW_COLOR}/(.*)
-        pathType: Prefix
+        pathType: ImplementationSpecific
         backend:
           service:
             name: frontend-svc-${NEW_COLOR}
             port:
               number: 8080
       - path: /_${NEW_COLOR}/api/?(.*)
-        pathType: Prefix
+        pathType: ImplementationSpecific
         backend:
           service:
             name: backend-svc-${NEW_COLOR}
