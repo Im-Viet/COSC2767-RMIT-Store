@@ -182,7 +182,7 @@ spec:
         - containerPort: 8080
         env:
         - name: API_URL
-          valueFrom: "/_${NEW_COLOR}/api"   # idle color talks to idle color API via temp paths
+          value: "/_${NEW_COLOR}/api"   # idle color talks to idle color API via temp paths
         - name: HOST
           value: "0.0.0.0"
         - name: PORT
@@ -384,10 +384,6 @@ YAML
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
 
-    stage('Blue-Green: remove temp test ingress') {
-      steps { sh 'kubectl -n "$NAMESPACE" delete ingress app-ingress-${NEW_COLOR}-test --ignore-not-found=true' }
-    }
-
     stage('Blue-Green: switch traffic to NEW color') {
       when { expression { return params.PROMOTE } }
       steps {
@@ -462,8 +458,6 @@ YAML
     failure {
       echo "Deployment failed - attempting rollback"
       sh '''
-        kubectl -n "$NAMESPACE" rollout undo deploy/backend || true
-        kubectl -n "$NAMESPACE" rollout undo deploy/frontend || true
         kubectl -n "$NAMESPACE" get deploy -o wide || true
         kubectl -n "$NAMESPACE" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'"${LIVE_COLOR}"'"}}}' || true
         kubectl -n "$NAMESPACE" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'"${LIVE_COLOR}"'"}}}' || true
