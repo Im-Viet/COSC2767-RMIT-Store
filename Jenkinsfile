@@ -126,20 +126,13 @@ pipeline {
           metadata:
             name: backend-${NEW_COLOR}
             namespace: ${NAMESPACE}
-            labels:
-              app: backend
-              version: ${NEW_COLOR}
+            labels: { app: backend, version: ${NEW_COLOR} }
           spec:
             replicas: 1
-            selector:
-              matchLabels:
-                app: backend
-                version: ${NEW_COLOR}
+            selector: { matchLabels: { app: backend, version: ${NEW_COLOR} } }
             template:
               metadata:
-                labels:
-                  app: backend
-                  version: ${NEW_COLOR}
+                labels: { app: backend, version: ${NEW_COLOR} }
               spec:
                 containers:
                 - name: backend
@@ -152,28 +145,19 @@ pipeline {
                   - name: BASE_API_URL
                     value: "api"
                   - name: MONGO_URI
-                    valueFrom:
-                      secretKeyRef:
-                        name: app-secrets
-                        key: MONGO_URI
+                    valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
                   - name: CLIENT_URL
-                    valueFrom:
-                      configMapKeyRef:
-                        name: app-config
-                        key: CLIENT_URL
+                    valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
           ---
           apiVersion: v1
           kind: Service
           metadata:
             name: backend-svc-${NEW_COLOR}
             namespace: ${NAMESPACE}
-            labels:
-              app: backend
+            labels: { app: backend }
           spec:
             type: ClusterIP
-            selector:
-              app: backend
-              version: ${NEW_COLOR}
+            selector: { app: backend, version: ${NEW_COLOR} }
             ports:
             - port: 3000
               targetPort: 3000
@@ -183,20 +167,13 @@ pipeline {
           metadata:
             name: frontend-${NEW_COLOR}
             namespace: ${NAMESPACE}
-            labels:
-              app: frontend
-              version: ${NEW_COLOR}
+            labels: { app: frontend, version: ${NEW_COLOR} }
           spec:
             replicas: 1
-            selector:
-              matchLabels:
-                app: frontend
-                version: ${NEW_COLOR}
+            selector: { matchLabels: { app: frontend, version: ${NEW_COLOR} } }
             template:
               metadata:
-                labels:
-                  app: frontend
-                  version: ${NEW_COLOR}
+                labels: { app: frontend, version: ${NEW_COLOR} }
               spec:
                 containers:
                 - name: frontend
@@ -205,10 +182,7 @@ pipeline {
                   - containerPort: 8080
                   env:
                   - name: API_URL
-                    valueFrom:
-                      configMapKeyRef:
-                        name: app-config
-                        key: API_URL
+                    valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
                   - name: HOST
                     value: "0.0.0.0"
                   - name: PORT
@@ -219,13 +193,10 @@ pipeline {
           metadata:
             name: frontend-svc-${NEW_COLOR}
             namespace: ${NAMESPACE}
-            labels:
-              app: frontend
+            labels: { app: frontend }
           spec:
             type: ClusterIP
-            selector:
-              app: frontend
-              version: ${NEW_COLOR}
+            selector: { app: frontend, version: ${NEW_COLOR} }
             ports:
             - port: 8080
               targetPort: 8080
