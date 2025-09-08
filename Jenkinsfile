@@ -214,7 +214,7 @@ YAML
           set -euo pipefail
           kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
           kubectl -n "$NAMESPACE" run smoke-api --restart=Never --image=curlimages/curl:8.7.1 -- \
-            sh -lc 'set -e; curl -fsS -i --max-time 15 http://backend-svc-${NEW_COLOR}:3000/api/product/list | head -n 30'
+            sh -lc 'set -e; curl -fsS -i --max-time 15 http://backend-svc-${NEW_COLOR}:3000/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D | head -n 30'
           kubectl -n "$NAMESPACE" delete pod smoke-api --ignore-not-found=true
         '''
       }
@@ -273,7 +273,7 @@ YAML
           curl -fsS -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/" | head -n 1
 
           echo "Hitting API product list (NEW color via header)..."
-          curl -fsS -i -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D" | head -n 30
+          curl -fsS -i -H "X-Color: ${NEW_COLOR}" --max-time 20 "http://$EP:8080/api/product/list?pageNum=1&pageSize=8" | head -n 30
 
           echo "✅ External smoke for NEW color passed"
         '''
