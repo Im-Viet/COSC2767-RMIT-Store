@@ -231,6 +231,10 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
+
+          kubectl -n "$PROD_NAMESPACE" set image deploy/backend backend="$BACKEND_IMAGE"
+          kubectl -n "$PROD_NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE"
+
           kubectl apply -f k8s/prod/00-namespace.yaml
           kubectl -n "$PROD_NAMESPACE" apply -f k8s/prod/10-configmap.yaml
           kubectl -n "$PROD_NAMESPACE" apply -f k8s/prod/11-secret.yaml
