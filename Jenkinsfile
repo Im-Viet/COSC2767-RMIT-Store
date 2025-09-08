@@ -290,7 +290,7 @@ YAML
           curl -fsS --max-time 20 "http://$EP:8080/_${NEW_COLOR}/" | head -n 1
 
           echo "Hitting API product list..."
-          curl -fsS -i --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/product/list" | head -n 30
+          curl -fsS -i --max-time 20 "http://$EP:8080/_${NEW_COLOR}/api/product/list?sortOrder=%7B%22_id%22%3A-1%7D" | head -n 30
 
           echo "✅ External smoke for NEW color passed"
         '''
