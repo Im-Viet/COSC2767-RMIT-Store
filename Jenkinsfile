@@ -219,7 +219,7 @@ metadata:
   name: app-ingress-${NEW_COLOR}-test
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/rewrite-target: /\\$1
 spec:
   ingressClassName: nginx
   rules:
