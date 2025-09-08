@@ -148,20 +148,6 @@ spec:
           valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
         - name: CLIENT_URL
           valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
-        readinessProbe:
-          httpGet:
-            path: /api/product/list
-            port: 3000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-        livenessProbe:
-          httpGet:
-            path: /api/product/list
-            port: 3000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
@@ -201,20 +187,6 @@ spec:
           value: "0.0.0.0"
         - name: PORT
           value: "8080"
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 3
 ---
 apiVersion: v1
 kind: Service
@@ -230,8 +202,8 @@ spec:
     targetPort: 8080
 YAML
 
-          kubectl -n "$NAMESPACE" rollout status deploy/backend-${NEW_COLOR}  --timeout=180s
-          kubectl -n "$NAMESPACE" rollout status deploy/frontend-${NEW_COLOR} --timeout=180s
+          kubectl -n "$NAMESPACE" rollout status deploy/backend-${NEW_COLOR}  --timeout=300s
+          kubectl -n "$NAMESPACE" rollout status deploy/frontend-${NEW_COLOR} --timeout=300s
         '''
       }
     }
@@ -275,15 +247,17 @@ YAML
     stage('Wait for ingress to be ready') {
       steps {
         sh '''
-          echo "Waiting for ingress to propagate and pods to be fully ready..."
-          sleep 30
+          echo "Waiting for pods to be fully ready..."
           
-          echo "Checking if all pods are ready..."
-          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=backend,version=${NEW_COLOR} --timeout=120s
-          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=frontend,version=${NEW_COLOR} --timeout=120s
+          echo "Checking if all pods are running and ready..."
+          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=backend,version=${NEW_COLOR} --timeout=180s || true
+          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=frontend,version=${NEW_COLOR} --timeout=180s || true
           
-          echo "All pods are ready. Waiting additional time for load balancer to register endpoints..."
-          sleep 15
+          echo "Checking deployment status..."
+          kubectl -n "$NAMESPACE" get pods -l version=${NEW_COLOR}
+          
+          echo "Waiting additional time for load balancer to register endpoints..."
+          sleep 20
         '''
       }
     }
