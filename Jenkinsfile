@@ -240,7 +240,7 @@ spec:
   - http:
       paths:
       - path: /_${NEW_COLOR}/(?!api/)(.*)
-        pathType: Prefix
+        pathType: ImplementationSpecific
         backend:
           service:
             name: frontend-svc-${NEW_COLOR}
@@ -264,7 +264,7 @@ spec:
   - http:
       paths:
       - path: /_${NEW_COLOR}/api/(.*)
-        pathType: Prefix
+        pathType: ImplementationSpecific
         backend:
           service:
             name: backend-svc-${NEW_COLOR}
