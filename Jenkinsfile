@@ -244,7 +244,12 @@ pipeline {
     }
 
     stage('Init Prod Manifests (first time only)') {
-      when { allOf { expression { currentBuild.currentResult == 'SUCCESS' }, expression { return params.APPLY_PROD_MANIFESTS } } }
+      when {
+        allOf {
+          expression { currentBuild.currentResult == 'SUCCESS' }
+          expression { return params.APPLY_PROD_MANIFESTS }
+        }
+      }
       steps {
         sh '''
           set -euo pipefail
@@ -260,7 +265,12 @@ pipeline {
     }
 
     stage('Bootstrap Prod Blue Images (one time)') {
-      when { allOf { expression { currentBuild.currentResult == 'SUCCESS' }, expression { return params.BOOTSTRAP_PROD_BLUE } } }
+      when {
+        allOf {
+          expression { currentBuild.currentResult == 'SUCCESS' }
+          expression { return params.BOOTSTRAP_PROD_BLUE }
+        }
+      }
       steps {
         sh '''
           set -euo pipefail
