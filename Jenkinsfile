@@ -305,15 +305,11 @@ pipeline {
         sh '''
           set -euo pipefail
 
-          sed -e "s|dev.local|${DEV_HOSTNAME}|g" \
-          -e "s|lb.local|${INGRESS_LB_HOST}|g" k8s/web/40-ingress.yaml | kubectl -n web apply -f -
+          sed -e "s|devhost|${DEV_HOSTNAME}|g" \
+          -e "s|lbhost|${INGRESS_LB_HOST}|g" k8s/web/40-ingress.yaml | kubectl -n web apply -f -
 
-          sed -e "s|prod.local|${PROD_HOSTNAME}|g" \
-          -e "s|lb.local|${INGRESS_LB_HOST}|g" k8s/prod/40-ingress.yaml | kubectl -n prod apply -f -
-
-          sed -e "s|prod.local|${PROD_HOSTNAME}|g" \
-          -e "s|lb.local|${INGRESS_LB_HOST}|g" \
-          -e "s|CANARY_WEIGHT|10|g" k8s/prod/45-ingress-canary.yaml | kubectl -n prod apply -f -
+          sed -e "s|prodhost|${PROD_HOSTNAME}|g" \
+          -e "s|lbhost|${INGRESS_LB_HOST}|g" k8s/prod/40-ingress.yaml | kubectl -n prod apply -f -
         '''
       }
     }
@@ -372,7 +368,7 @@ YAML
           kubectl -n "$PROD_NAMESPACE" apply -f k8s/prod/32-frontend-svc-canary.yaml
 
           # Canary ingress (weight)
-          sed -e "s|__PROD_HOST__|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" \
+          sed -e "s|prodhost|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" \
             k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NAMESPACE" apply -f -
 
           kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend-green --timeout=300s

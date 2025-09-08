@@ -5,11 +5,11 @@ metadata:
   namespace: prod
   annotations:
     nginx.ingress.kubernetes.io/canary: "true"
-    nginx.ingress.kubernetes.io/canary-weight: "CANARY_WEIGHT"
+    nginx.ingress.kubernetes.io/canary-weight: "__CANARY_WEIGHT__"
 spec:
   ingressClassName: nginx
   rules:
-  - host: prod.local
+  - host: prodhost
     http:
       paths:
       - path: /api
@@ -18,7 +18,7 @@ spec:
       - path: /
         pathType: Prefix
         backend: { service: { name: frontend-svc-canary, port: { number: 8080 } } }
-  - host: lb.local
+  - host: lbhost
     http:
       paths:
       - path: /api
