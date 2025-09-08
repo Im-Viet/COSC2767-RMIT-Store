@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: __DEV_HOST__
+  - host: DEV_HOST
     http:
       paths:
       - path: /api
@@ -15,7 +15,7 @@ spec:
       - path: /
         pathType: Prefix
         backend: { service: { name: frontend-svc, port: { number: 8080 } } }
-  - host: __LB_HOST__
+  - host: LB_HOST
     http:
       paths:
       - path: /api

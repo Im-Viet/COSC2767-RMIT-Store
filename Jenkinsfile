@@ -110,12 +110,7 @@ pipeline {
 
     stage('Apply k8s manifests (first time only)') {
       when { expression { return params.APPLY_MANIFESTS } }
-      steps { 
-        sh '''
-          # Apply all manifests except ingress (which contains placeholders)
-          find "k8s/$NAMESPACE" -name "*.yaml" ! -name "*ingress*" -exec kubectl -n "$NAMESPACE" apply -f {} +
-        '''
-      }
+      steps { sh 'kubectl -n "$NAMESPACE" apply -f "k8s/$NAMESPACE"' }
     }
 
     stage('Deploy new images') {
@@ -189,17 +184,6 @@ pipeline {
           ).trim()
           echo "LB Host: ${env.INGRESS_LB_HOST}, LB IP: ${env.INGRESS_LB_IP}"
         }
-      }
-    }
-
-    stage('Apply Web Ingress') {
-      steps {
-        sh '''
-          set -euo pipefail
-          # Apply web ingress with placeholders replaced
-          sed -e "s|__DEV_HOST__|${DEV_HOSTNAME}|g" \
-          -e "s|__LB_HOST__|${INGRESS_LB_HOST}|g" k8s/web/40-ingress.yaml | kubectl -n web apply -f -
-        '''
       }
     }
 
@@ -320,7 +304,12 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          # Apply prod ingress with placeholders replaced
+          # sed "s|__PROD_HOST__|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NAMESPACE" apply -f -
+          # sed -e "s|__PROD_HOST__|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" \
+          #   k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NAMESPACE" apply -f -
+          sed -e "s|__DEV_HOST__|${DEV_HOSTNAME}|g" \
+          -e "s|__LB_HOST__|${INGRESS_LB_HOST}|g" k8s/web/40-ingress.yaml | kubectl -n web apply -f -
+
           sed -e "s|__PROD_HOST__|${PROD_HOSTNAME}|g" \
           -e "s|__LB_HOST__|${INGRESS_LB_HOST}|g" k8s/prod/40-ingress.yaml | kubectl -n prod apply -f -
 
