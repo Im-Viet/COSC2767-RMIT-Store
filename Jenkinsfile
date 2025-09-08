@@ -28,6 +28,8 @@ pipeline {
     NAMESPACE = "${params.K8S_NAMESPACE}"
     BACKEND_REPO = "${params.BACKEND_REPO}"
     FRONTEND_REPO = "${params.FRONTEND_REPO}"
+    PROD_NAMESPACE = "${params.PROD_NAMESPACE}"
+    CANARY_WEIGHT = "${params.CANARY_WEIGHT}"
     NPM_CONFIG_CACHE = "${JENKINS_HOME}/.npm-cache"
     PLAYWRIGHT_BROWSERS_PATH = "${JENKINS_HOME}/.cache/ms-playwright"
     DOCKER_BUILDKIT = "1"
