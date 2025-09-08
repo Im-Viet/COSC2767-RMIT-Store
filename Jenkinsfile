@@ -123,59 +123,112 @@ pipeline {
           cat <<YAML | kubectl -n "$NAMESPACE" apply -f -
           apiVersion: apps/v1
           kind: Deployment
-          metadata: { name: backend-${NEW_COLOR}, namespace: $NAMESPACE, labels: { app: backend, version: ${NEW_COLOR} } }
+          metadata:
+            name: backend-${NEW_COLOR}
+            namespace: ${NAMESPACE}
+            labels:
+              app: backend
+              version: ${NEW_COLOR}
           spec:
             replicas: 1
-            selector: { matchLabels: { app: backend, version: ${NEW_COLOR} } }
+            selector:
+              matchLabels:
+                app: backend
+                version: ${NEW_COLOR}
             template:
-              metadata: { labels: { app: backend, version: ${NEW_COLOR} } }
+              metadata:
+                labels:
+                  app: backend
+                  version: ${NEW_COLOR}
               spec:
                 containers:
                 - name: backend
-                  image: "$BACKEND_IMAGE"
-                  ports: [{ containerPort: 3000 }]
+                  image: ${BACKEND_IMAGE}
+                  ports:
+                  - containerPort: 3000
                   env:
-                  - { name: PORT, value: "3000" }
-                  - { name: BASE_API_URL, value: "api" }
+                  - name: PORT
+                    value: "3000"
+                  - name: BASE_API_URL
+                    value: "api"
                   - name: MONGO_URI
-                    valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
+                    valueFrom:
+                      secretKeyRef:
+                        name: app-secrets
+                        key: MONGO_URI
                   - name: CLIENT_URL
-                    valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
+                    valueFrom:
+                      configMapKeyRef:
+                        name: app-config
+                        key: CLIENT_URL
           ---
           apiVersion: v1
           kind: Service
-          metadata: { name: backend-svc-${NEW_COLOR}, namespace: $NAMESPACE, labels: { app: backend } }
+          metadata:
+            name: backend-svc-${NEW_COLOR}
+            namespace: ${NAMESPACE}
+            labels:
+              app: backend
           spec:
             type: ClusterIP
-            selector: { app: backend, version: ${NEW_COLOR} }
-            ports: [{ port: 3000, targetPort: 3000 }]
+            selector:
+              app: backend
+              version: ${NEW_COLOR}
+            ports:
+            - port: 3000
+              targetPort: 3000
           ---
           apiVersion: apps/v1
           kind: Deployment
-          metadata: { name: frontend-${NEW_COLOR}, namespace: $NAMESPACE, labels: { app: frontend, version: ${NEW_COLOR} } }
+          metadata:
+            name: frontend-${NEW_COLOR}
+            namespace: ${NAMESPACE}
+            labels:
+              app: frontend
+              version: ${NEW_COLOR}
           spec:
             replicas: 1
-            selector: { matchLabels: { app: frontend, version: ${NEW_COLOR} } }
+            selector:
+              matchLabels:
+                app: frontend
+                version: ${NEW_COLOR}
             template:
-              metadata: { labels: { app: frontend, version: ${NEW_COLOR} } }
+              metadata:
+                labels:
+                  app: frontend
+                  version: ${NEW_COLOR}
               spec:
                 containers:
                 - name: frontend
-                  image: "$FRONTEND_IMAGE"
-                  ports: [{ containerPort: 8080 }]
+                  image: ${FRONTEND_IMAGE}
+                  ports:
+                  - containerPort: 8080
                   env:
                   - name: API_URL
-                    valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
-                  - { name: HOST, value: "0.0.0.0" }
-                  - { name: PORT, value: "8080" }
+                    valueFrom:
+                      configMapKeyRef:
+                        name: app-config
+                        key: API_URL
+                  - name: HOST
+                    value: "0.0.0.0"
+                  - name: PORT
+                    value: "8080"
           ---
           apiVersion: v1
           kind: Service
-          metadata: { name: frontend-svc-${NEW_COLOR}, namespace: $NAMESPACE, labels: { app: frontend } }
+          metadata:
+            name: frontend-svc-${NEW_COLOR}
+            namespace: ${NAMESPACE}
+            labels:
+              app: frontend
           spec:
             type: ClusterIP
-            selector: { app: frontend, version: ${NEW_COLOR} }
-            ports: [{ port: 8080, targetPort: 8080 }]
+            selector:
+              app: frontend
+              version: ${NEW_COLOR}
+            ports:
+            - port: 8080
+              targetPort: 8080
           YAML
 
           kubectl -n "$NAMESPACE" rollout status deploy/backend-${NEW_COLOR}  --timeout=180s
@@ -206,13 +259,15 @@ pipeline {
                   backend:
                     service:
                       name: frontend-svc-${NEW_COLOR}
-                      port: { number: 8080 }
+                      port:
+                        number: 8080
                 - path: /_${NEW_COLOR}/api/?(.*)
                   pathType: Prefix
                   backend:
                     service:
                       name: backend-svc-${NEW_COLOR}
-                      port: { number: 3000 }
+                      port:
+                        number: 3000
           YAML
         '''
       }
@@ -326,8 +381,8 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          kubectl -n "$NAMESPACE" patch svc backend-svc  -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"${NEW_COLOR}\"}}}"
-          kubectl -n "$NAMESPACE" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"${NEW_COLOR}\"}}}"
+          kubectl -n "$NAMESPACE" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'"${NEW_COLOR}"'"}}}'
+          kubectl -n "$NAMESPACE" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'"${NEW_COLOR}"'"}}}'
         '''
       }
     }
@@ -393,8 +448,8 @@ pipeline {
         kubectl -n "$NAMESPACE" rollout undo deploy/backend || true
         kubectl -n "$NAMESPACE" rollout undo deploy/frontend || true
         kubectl -n "$NAMESPACE" get deploy -o wide || true
-        kubectl -n "$NAMESPACE" patch svc backend-svc  -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"${LIVE_COLOR}\"}}}" || true
-        kubectl -n "$NAMESPACE" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"${LIVE_COLOR}\"}}}" || true
+        kubectl -n "$NAMESPACE" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'"${LIVE_COLOR}"'"}}}' || true
+        kubectl -n "$NAMESPACE" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'"${LIVE_COLOR}"'"}}}' || true
       '''
       emailext(
         subject: "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
