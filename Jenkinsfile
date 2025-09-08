@@ -19,7 +19,7 @@ pipeline {
     string(name: 'PROD_NAMESPACE', defaultValue: 'prod', description: 'Kubernetes namespace for production')
     string(name: 'CANARY_WEIGHT', defaultValue: '10', description: 'Initial canary traffic weight (0-100)')
     booleanParam(name: 'APPLY_PROD_MANIFESTS', defaultValue: true, description: 'Apply k8s/prod manifests (first deploy to prod)')
-
+    // booleanParam(name: 'BOOTSTRAP_PROD_BLUE', defaultValue: true, description: 'Set blue (stable) images on first prod deployment')
   }
 
   environment {
@@ -231,10 +231,6 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-
-          kubectl -n "$PROD_NAMESPACE" set image deploy/backend backend="$BACKEND_IMAGE"
-          kubectl -n "$PROD_NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE"
-
           kubectl apply -f k8s/prod/00-namespace.yaml
           kubectl -n "$PROD_NAMESPACE" apply -f k8s/prod/10-configmap.yaml
           kubectl -n "$PROD_NAMESPACE" apply -f k8s/prod/11-secret.yaml
@@ -246,6 +242,22 @@ pipeline {
       }
     }
 
+    // stage('Bootstrap Prod Blue Images (one time)') {
+    //   when { allOf { expression { currentBuild.currentResult == 'SUCCESS' }; expression { return params.BOOTSTRAP_PROD_BLUE } } }
+    //   steps {
+    //     sh '''
+    //       set -euo pipefail
+    //       # Set images for stable (blue) deploys so 90% traffic is healthy during canary
+    //       kubectl -n "$PROD_NAMESPACE" set image deploy/backend  backend="$BACKEND_IMAGE"   --record
+    //       kubectl -n "$PROD_NAMESPACE" set image deploy/frontend frontend="$FRONTEND_IMAGE" --record
+
+    //       # Wait for blue to be healthy
+    //       kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend  --timeout=300s
+    //       kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend --timeout=300s
+    //     '''
+    //   }
+    // }
+
     stage('Compute PROD_HOST & PROD_BASE_URL') {
       when { expression { currentBuild.currentResult == 'SUCCESS' } }
       steps {
@@ -254,7 +266,7 @@ pipeline {
           if (!ep) {
             ep = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
           }
-          env.PROD_HOST = "prod.${ep}.nip.io"
+          env.PROD_HOST = ep                    // ✅ just the ELB hostname/IP
           env.PROD_BASE_URL = "http://${env.PROD_HOST}:8080"
           echo "PROD_BASE_URL=${env.PROD_BASE_URL}"
         }
@@ -291,7 +303,6 @@ spec:
       containers:
       - name: backend
         image: "$BACKEND_IMAGE"
-        imagePullPolicy: Always
         ports: [ { containerPort: 3000 } ]
         env:
         - { name: PORT, value: "3000" }
@@ -313,7 +324,6 @@ spec:
       containers:
       - name: frontend
         image: "$FRONTEND_IMAGE"
-        imagePullPolicy: Always
         ports: [ { containerPort: 8080 } ]
         env:
         - name: API_URL
