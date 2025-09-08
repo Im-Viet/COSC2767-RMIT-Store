@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend-blue
-  namespace: prod
-  labels: { app: frontend, color: blue }
+  name: frontend
+  namespace: web
+  labels: { app: frontend, version: blue }
 spec:
-  replicas: 2
-  selector: { matchLabels: { app: frontend, color: blue } }
+  replicas: 1
+  selector: { matchLabels: { app: frontend, version: blue } }
   template:
     metadata:
-      labels: { app: frontend, color: blue }
+      labels: { app: frontend, version: blue }
     spec:
       containers:
       - name: frontend
         image: 293113319402.dkr.ecr.us-east-1.amazonaws.com/rmit-store/frontend:latest
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8080
+        - containerPort: 8080   # webpack-dev-server
         env:
         - name: API_URL
           valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }

@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend-green
-  namespace: prod
-  labels: { app: backend, color: green }
+  name: backend
+  namespace: web
+  labels: { app: backend, version: blue }
 spec:
-  replicas: 2
-  selector: { matchLabels: { app: backend, color: green } }
+  replicas: 1
+  selector: { matchLabels: { app: backend, version: blue } }
   template:
     metadata:
-      labels: { app: backend, color: green }
+      labels: { app: backend, version: blue }
     spec:
       containers:
       - name: backend

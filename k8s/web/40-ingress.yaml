@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: app-ingress
-  namespace: prod
+  namespace: web
 spec:
   ingressClassName: nginx
   rules:
@@ -12,11 +12,11 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: backend-svc
+            name: backend-svc      # ⬅️ sends /api to backend
             port: { number: 3000 }
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: frontend-svc
+            name: frontend-svc     # ⬅️ everything else to frontend
             port: { number: 8080 }

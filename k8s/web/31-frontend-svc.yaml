@@ -2,13 +2,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend-svc
-  namespace: prod
+  namespace: web
   labels: { app: frontend }
 spec:
   type: ClusterIP
-  selector:
-    app: frontend
-    color: blue   # << flip to 'green' to promote
+  selector: { app: frontend, version: blue } # traffic starts at BLUE
   ports:
   - port: 8080
     targetPort: 8080
