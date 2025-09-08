@@ -287,7 +287,7 @@ spec:
       containers:
       - name: backend
         image: "$BACKEND_IMAGE"
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports: [ { containerPort: 3000 } ]
         env:
         - { name: PORT, value: "3000" }
@@ -296,6 +296,8 @@ spec:
           valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
         - name: CLIENT_URL
           valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
+        - name: JWT_SECRET
+          valueFrom: { secretKeyRef: { name: app-secrets, key: JWT_SECRET } }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -309,7 +311,7 @@ spec:
       containers:
       - name: frontend
         image: "$FRONTEND_IMAGE"
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports: [ { containerPort: 8080 } ]
         env:
         - name: API_URL
@@ -326,8 +328,8 @@ YAML
           sed -e "s|__PROD_HOST__|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" \
             k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NAMESPACE" apply -f -
 
-          kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend-green --timeout=180s
-          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend-green --timeout=180s
+          kubectl -n "$PROD_NAMESPACE" rollout status deploy/backend-green --timeout=300s
+          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend-green --timeout=300s
         '''
       }
     }
