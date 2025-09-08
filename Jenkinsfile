@@ -15,7 +15,7 @@ pipeline {
     string(name: 'BACKEND_REPO', defaultValue: 'rmit-store/backend', description: 'Backend repository')
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'Frontend repository')
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: false, description: 'Apply k8s/<namespace>/ manifests (first deploy)')
-    booleanParam(name: 'SEED_DB', defaultValue: true, description: 'Run seed job after deploy')
+    booleanParam(name: 'SEED_DB', defaultValue: false, description: 'Run seed job after deploy')
     booleanParam(name: 'PROMOTE', defaultValue: true, description: 'After tests pass, promote new color (blue-green flip)')
     booleanParam(name: 'KEEP_OLD_COLOR', defaultValue: false, description: 'If true, do not scale old color to 0')
   }
@@ -331,42 +331,29 @@ YAML
     }
 
     stage('Seed database (from file)') {
+      when { expression { return params.SEED_DB } }
       steps {
-        script {
-          if (params.SEED_DB) {
-            echo "SEED_DB parameter is true - attempting to seed database"
-            try {
-              withCredentials([usernamePassword(credentialsId: 'seed-admin',
-                                                usernameVariable: 'SEED_ADMIN_EMAIL',
-                                                passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
-                sh '''
-                  set -euo pipefail
+        withCredentials([usernamePassword(credentialsId: 'seed-admin',
+                                          usernameVariable: 'SEED_ADMIN_EMAIL',
+                                          passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
+          sh '''
+            set -euo pipefail
 
-                  # Clean previous run (if any)
-                  kubectl -n "$NAMESPACE" delete job/seed-db --ignore-not-found=true
+            # Clean previous run (if any)
+            kubectl -n "$NAMESPACE" delete job/seed-db --ignore-not-found=true
 
-                  # Create/refresh a temporary Secret with admin creds
-                  kubectl -n "$NAMESPACE" create secret generic seed-admin \
-                    --from-literal=email="$SEED_ADMIN_EMAIL" \
-                    --from-literal=password="$SEED_ADMIN_PASSWORD" \
-                    --dry-run=client -o yaml | kubectl apply -f -
+            # Create/refresh a temporary Secret with admin creds
+            kubectl -n "$NAMESPACE" create secret generic seed-admin \
+              --from-literal=email="$SEED_ADMIN_EMAIL" \
+              --from-literal=password="$SEED_ADMIN_PASSWORD" \
+              --dry-run=client -o yaml | kubectl apply -f -
 
-                  # Substitute image into the checked-in Job file and apply it
-                  sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/99-seed-db.yaml | kubectl -n "$NAMESPACE" apply -f -
+            # Substitute image into the checked-in Job file and apply it
+            sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/99-seed-db.yaml | kubectl -n "$NAMESPACE" apply -f -
 
-                  kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db --timeout=180s || true
-                  kubectl -n "$NAMESPACE" delete secret seed-admin --ignore-not-found=true
-                '''
-              }
-              echo "✅ Database seeding completed successfully"
-            } catch (Exception e) {
-              echo "⚠️  Warning: Could not seed database - missing 'seed-admin' credentials or seeding failed: ${e.getMessage()}"
-              echo "Tests will run against empty database. Some tests may be skipped."
-            }
-          } else {
-            echo "SEED_DB parameter is false - skipping database seeding"
-            echo "Tests will run against existing database state"
-          }
+            kubectl -n "$NAMESPACE" wait --for=condition=complete job/seed-db --timeout=180s || true
+            kubectl -n "$NAMESPACE" delete secret seed-admin --ignore-not-found=true
+          '''
         }
       }
     }
@@ -381,69 +368,6 @@ YAML
           env.E2E_BASE_URL = "http://${ep}:8080/_${env.NEW_COLOR}/"
           echo "E2E_BASE_URL=${env.E2E_BASE_URL}"
         }
-      }
-    }
-
-    stage('Wait for application readiness') {
-      steps {
-        sh '''
-          set -euo pipefail
-          echo "Waiting for application to be fully ready..."
-          
-          # Wait for pods to be ready
-          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=frontend,version="${NEW_COLOR}" --timeout=180s
-          kubectl -n "$NAMESPACE" wait --for=condition=ready pod -l app=backend,version="${NEW_COLOR}" --timeout=180s
-          
-          # Additional wait for application startup
-          echo "Waiting additional 30 seconds for application initialization..."
-          sleep 30
-          
-          # Test application readiness with retries
-          EP=""
-          for i in $(seq 1 30); do
-            EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'); \
-            [ -z "$EP" ] && EP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'); \
-            [ -n "$EP" ] && break; sleep 5; done
-          [ -z "$EP" ] && { echo "No ingress endpoint"; exit 1; }
-          
-          # Test both frontend and API with retries
-          echo "Testing application readiness..."
-          for i in $(seq 1 10); do
-            echo "Attempt $i/10..."
-            
-            # Test frontend
-            if curl -fsS --max-time 10 "http://$EP:8080/_${NEW_COLOR}/" >/dev/null 2>&1; then
-              echo "✅ Frontend is responding"
-              FRONTEND_OK=true
-            else
-              echo "⚠️  Frontend not ready yet"
-              FRONTEND_OK=false
-            fi
-            
-            # Test API  
-            if curl -fsS --max-time 10 "http://$EP:8080/_${NEW_COLOR}/api/product/list" >/dev/null 2>&1; then
-              echo "✅ API is responding"
-              API_OK=true
-            else
-              echo "⚠️  API not ready yet"
-              API_OK=false
-            fi
-            
-            if [ "$FRONTEND_OK" = true ] && [ "$API_OK" = true ]; then
-              echo "✅ Application is ready for testing"
-              break
-            fi
-            
-            if [ $i -lt 10 ]; then
-              echo "Waiting 15 seconds before retry..."
-              sleep 15
-            fi
-          done
-          
-          if [ "$FRONTEND_OK" != true ] || [ "$API_OK" != true ]; then
-            echo "⚠️  Application may not be fully ready, but proceeding with tests"
-          fi
-        '''
       }
     }
 
