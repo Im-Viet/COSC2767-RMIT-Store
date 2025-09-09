@@ -170,24 +170,26 @@ pipeline {
 
     stage('Dev UI E2E (Playwright, DEV)') {
       steps {
-        try {
-          timeout(time: 3, unit: 'MINUTES') {
-            sh '''
-              set -euo pipefail
-              docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
-              docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
-                --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
-                -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
-                -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-                -e E2E_BASE_URL="${E2E_BASE_URL}" \
-                -v "$PWD":/work -w /work \
-                mcr.microsoft.com/playwright:v1.55.0-jammy \
-                bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test:e2e'
-            '''
+        script {
+          try {
+            timeout(time: 3, unit: 'MINUTES') {
+              sh '''
+                set -euo pipefail
+                docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
+                docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
+                  --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
+                  -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
+                  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+                  -e E2E_BASE_URL="${E2E_BASE_URL}" \
+                  -v "$PWD":/work -w /work \
+                  mcr.microsoft.com/playwright:v1.55.0-jammy \
+                  bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test:e2e'
+              '''
+            }
+          } catch (Exception e) {
+            echo "❌ Canary validation failed: ${e.getMessage()}"
+            error "E2E tests failed, triggering rollback"
           }
-        } catch (Exception e) {
-          echo "❌ Canary validation failed: ${e.getMessage()}"
-          error "E2E tests failed, triggering rollback"
         }
       }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
@@ -415,7 +417,7 @@ YAML
     }
 
     stage('Complete Canary Promotion') {
-      when { not { params.ROLLBACK_ONLY } }
+      when { expression { return env.IS_FIRST_DEPLOYMENT != 'true' } }
       steps {
         sh '''
           set -euo pipefail
