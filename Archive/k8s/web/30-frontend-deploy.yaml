@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: web
+  labels: { app: frontend, version: blue }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: frontend, version: blue } }
+  template:
+    metadata:
+      labels: { app: frontend, version: blue }
+    spec:
+      containers:
+      - name: frontend
+        image: 293113319402.dkr.ecr.us-east-1.amazonaws.com/rmit-store/frontend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080   # webpack-dev-server
+        env:
+        - name: API_URL
+          valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8080"
