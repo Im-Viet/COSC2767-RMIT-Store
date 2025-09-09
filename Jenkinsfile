@@ -99,22 +99,6 @@ pipeline {
       steps { sh 'aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"' }
     }
 
-    stage('Apply k8s manifests (DEV, first time only)') {
-      when { expression { return params.APPLY_MANIFESTS } }
-      steps { sh 'kubectl -n "$DEV_NS" apply -f "k8s/$DEV_NS"' }
-    }
-
-    stage('Deploy to DEV') {
-      steps {
-        sh '''
-          kubectl -n "$DEV_NS" set image deploy/backend  backend="$BACKEND_IMAGE"
-          kubectl -n "$DEV_NS" set image deploy/frontend frontend="$FRONTEND_IMAGE"
-          kubectl -n "$DEV_NS" rollout status deploy/backend  --timeout=180s
-          kubectl -n "$DEV_NS" rollout status deploy/frontend --timeout=180s
-        '''
-      }
-    }
-
     stage('Discover Ingress & URLs') {
       steps {
         script {
@@ -145,6 +129,22 @@ pipeline {
         sh '''
           set -euo pipefail
           sed "s|__DEV_HOST__|$DEV_HOST|g" k8s/web/40-ingress.yaml | kubectl -n "$DEV_NS" apply -f -
+        '''
+      }
+    }
+
+    stage('Apply k8s manifests (DEV, first time only)') {
+      when { expression { return params.APPLY_MANIFESTS } }
+      steps { sh 'kubectl -n "$DEV_NS" apply -f "k8s/$DEV_NS"' }
+    }
+
+    stage('Deploy to DEV') {
+      steps {
+        sh '''
+          kubectl -n "$DEV_NS" set image deploy/backend  backend="$BACKEND_IMAGE"
+          kubectl -n "$DEV_NS" set image deploy/frontend frontend="$FRONTEND_IMAGE"
+          kubectl -n "$DEV_NS" rollout status deploy/backend  --timeout=180s
+          kubectl -n "$DEV_NS" rollout status deploy/frontend --timeout=180s
         '''
       }
     }
