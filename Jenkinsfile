@@ -118,8 +118,9 @@ pipeline {
           env.INGRESS_LB_HOST = lbHost
           env.INGRESS_LB_IP   = sh(script: "getent hosts ${lbHost} | awk '{print \$1}' | head -n1 || dig +short ${lbHost} | head -n1", returnStdout: true).trim()
 
-          def devHost  = params.DEV_HOSTNAME  == 'auto' ? "dev.${lbHost}.nip.io"  : params.DEV_HOSTNAME
-          def prodHost = params.PROD_HOSTNAME == 'auto' ? "prod.${lbHost}.nip.io" : params.PROD_HOSTNAME
+          def ip = env.INGRESS_LB_IP
+          def devHost  = params.DEV_HOSTNAME  == 'auto' ? "dev.${ip}.nip.io"  : params.DEV_HOSTNAME
+          def prodHost = params.PROD_HOSTNAME == 'auto' ? "prod.${ip}.nip.io" : params.PROD_HOSTNAME
           env.DEV_HOST  = devHost
           env.PROD_HOST = prodHost
 
