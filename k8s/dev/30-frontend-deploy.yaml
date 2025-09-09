@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: web
+  namespace: dev
   labels: { app: frontend, version: blue }
 spec:
   replicas: 1

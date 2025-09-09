@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: web
+  namespace: dev
 data:
   API_URL: "/api"
-  CLIENT_URL: "http://frontend-svc.web.svc.cluster.local"
+  CLIENT_URL: "http://frontend-svc.dev.svc.cluster.local"
