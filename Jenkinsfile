@@ -140,6 +140,15 @@ pipeline {
       }
     }
 
+    stage('Apply Dev Ingress (base)') {
+      steps {
+        sh '''
+          set -euo pipefail
+          sed "s|__DEV_HOST__|$DEV_HOST|g" k8s/web/40-ingress.yaml | kubectl -n "$DEV_NS" apply -f -
+        '''
+      }
+    }
+
     stage('Seed database (DEV)') {
       when { expression { return params.SEED_DB } }
       steps {
