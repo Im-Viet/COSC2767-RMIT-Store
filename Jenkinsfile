@@ -250,9 +250,9 @@ pipeline {
           sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
 
           # Initial services point to new color
-          echo "First deployment - pointing main services to $NEW_COLOR"
-          kubectl -n "$PROD_NS" patch svc backend-svc -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"$NEW_COLOR\"}}}"
-          kubectl -n "$PROD_NS" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"$NEW_COLOR\"}}}"
+          echo "First deployment - pointing main services to $ACTIVE_COLOR"
+          kubectl -n "$PROD_NS" patch svc backend-svc -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"$ACTIVE_COLOR\"}}}"
+          kubectl -n "$PROD_NS" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"$ACTIVE_COLOR\"}}}"
         '''
       }
     }
@@ -425,7 +425,7 @@ YAML
           # Switch main services to new version
           kubectl -n "$PROD_NS" patch svc backend-svc -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"$NEW_COLOR\"}}}"
           kubectl -n "$PROD_NS" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"$NEW_COLOR\"}}}"
-          
+
           # Remove canary ingress
           kubectl -n "$PROD_NS" delete ingress app-ingress-canary --ignore-not-found=true
           
