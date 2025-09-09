@@ -170,34 +170,34 @@ pipeline {
       }
     }
 
-    stage('Wait DEV readiness') {
-      steps {
-        sh '''
-          set -euo pipefail
-          echo "Warming up DEV endpoints: $E2E_BASE_URL ..."
+    // stage('Wait DEV readiness') {
+    //   steps {
+    //     sh '''
+    //       set -euo pipefail
+    //       echo "Warming up DEV endpoints: $E2E_BASE_URL ..."
 
-          # Frontend readiness via --resolve (bypass DNS)
-          for i in $(seq 1 18); do
-            if curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -fsSI "${E2E_BASE_URL}/" >/dev/null 2>&1; then
-              echo "Frontend is responding."
-              break
-            fi
-            echo "Waiting for frontend... ($i/18)"
-            sleep 5
-          done
+    //       # Frontend readiness via --resolve (bypass DNS)
+    //       for i in $(seq 1 18); do
+    //         if curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -fsSI "${E2E_BASE_URL}/" >/dev/null 2>&1; then
+    //           echo "Frontend is responding."
+    //           break
+    //         fi
+    //         echo "Waiting for frontend... ($i/18)"
+    //         sleep 5
+    //       done
 
-          # Backend readiness via --resolve (bypass DNS)
-          for i in $(seq 1 18); do
-            if curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -fsS "${E2E_BASE_URL}/api/brand/list" >/dev/null 2>&1; then
-              echo "Backend API is responding."
-              break
-            fi
-            echo "Waiting for backend API... ($i/18)"
-            sleep 5
-          done
-        '''
-      }
-    }
+    //       # Backend readiness via --resolve (bypass DNS)
+    //       for i in $(seq 1 18); do
+    //         if curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -fsS "${E2E_BASE_URL}/api/brand/list" >/dev/null 2>&1; then
+    //           echo "Backend API is responding."
+    //           break
+    //         fi
+    //         echo "Waiting for backend API... ($i/18)"
+    //         sleep 5
+    //       done
+    //     '''
+    //   }
+    // }
 
     stage('Web UI E2E (Playwright, DEV)') {
       steps {
@@ -319,33 +319,40 @@ YAML
           # Canary ingress with weight
           sed -e "s|prod-host|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NS" apply -f -
 
-          kubectl -n "$PROD_NS" rollout status deploy/backend-green --timeout=300s
-          kubectl -n "$PROD_NS" rollout status deploy/frontend-green --timeout=300s
+          kubectl -n "$PROD_NS" rollout status deploy/backend-green --timeout=180s
+          kubectl -n "$PROD_NS" rollout status deploy/frontend-green --timeout=180s
         '''
       }
     }
 
     stage('Validate Canary (PROD)') {
       steps {
-        sh '''
-          docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
+        withCredentials([usernamePassword(credentialsId: 'seed-admin',
+                                        usernameVariable: 'SEED_ADMIN_EMAIL',
+                                        passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
+          sh '''
+            set -euo pipefail
+            docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
 
-          echo "----- FRONTEND HEADERS -----"
-          curl --resolve "${PROD_HOST}:8080:${INGRESS_LB_IP}" -i "${PROD_BASE_URL}/" | head -n 20 || true
+            echo "----- FRONTEND HEADERS -----"
+            curl --resolve "${PROD_HOST}:8080:${INGRESS_LB_IP}" -i "${PROD_BASE_URL}/" | head -n 20 || true
 
-          echo "----- SAMPLE API CALL -----"
-          curl --resolve "${PROD_HOST}:8080:${INGRESS_LB_IP}" -sS "${PROD_BASE_URL}/api/brand/list" | head -c 400 || true
-          echo
+            echo "----- SAMPLE API CALL -----"
+            curl --resolve "${PROD_HOST}:8080:${INGRESS_LB_IP}" -sS "${PROD_BASE_URL}/api/brand/list" | head -c 400 || true
+            echo
 
-          docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
-            --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
-            -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
-            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-            -e E2E_BASE_URL="${PROD_BASE_URL}" \
-            -v "$PWD":/work -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-jammy \
-            bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test:e2e'
-        '''
+            docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
+              --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
+              -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
+              -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+              -e E2E_BASE_URL="${PROD_BASE_URL}" \
+              -e E2E_EMAIL="${SEED_ADMIN_EMAIL}" \
+              -e E2E_PASSWORD="${SEED_ADMIN_PASSWORD}" \
+              -v "$PWD":/work -w /work \
+              mcr.microsoft.com/playwright:v1.55.0-jammy \
+              bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test:e2e'
+          '''
+        }
       }
     }
 
