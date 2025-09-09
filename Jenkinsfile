@@ -328,8 +328,15 @@ YAML
     stage('Validate Canary (PROD)') {
       steps {
         sh '''
-          curl -fsS "$PROD_BASE_URL/" -I || true
           docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
+
+          echo "----- FRONTEND HEADERS -----"
+          curl --resolve "${PROD_HOST}:8080:${INGRESS_LB_IP}" -i "${PROD_BASE_URL}/" | head -n 20 || true
+
+          echo "----- SAMPLE API CALL -----"
+          curl --resolve "${PROD_HOST}:8080:${INGRESS_LB_IP}" -sS "${PROD_BASE_URL}/api/brand/list" | head -c 400 || true
+          echo
+
           docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
             --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
             -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
