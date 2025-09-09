@@ -246,7 +246,7 @@ pipeline {
           # Initial services point to new color
           echo "First deployment - pointing main services to ${NEW_COLOR}"
           kubectl -n "$PROD_NS" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'$NEW_COLOR'"}}}'
-          kubectl -n "$PROD_NS" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'$NEW     _COLOR'"}}}'
+          kubectl -n "$PROD_NS" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'$NEW_COLOR'"}}}'
         '''
       }
     }
