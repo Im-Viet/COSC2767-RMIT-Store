@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: __PROD_HOST__
+  - host: prod-host
     http:
       paths:
       - path: /api

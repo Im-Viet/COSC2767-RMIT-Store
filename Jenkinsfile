@@ -99,6 +99,22 @@ pipeline {
       steps { sh 'aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"' }
     }
 
+    stage('Apply k8s manifests (DEV, first time only)') {
+      when { expression { return params.APPLY_MANIFESTS } }
+      steps { sh 'kubectl -n "$DEV_NS" apply -f "k8s/$DEV_NS"' }
+    }
+
+    stage('Deploy to DEV') {
+      steps {
+        sh '''
+          kubectl -n "$DEV_NS" set image deploy/backend  backend="$BACKEND_IMAGE"
+          kubectl -n "$DEV_NS" set image deploy/frontend frontend="$FRONTEND_IMAGE"
+          kubectl -n "$DEV_NS" rollout status deploy/backend  --timeout=180s
+          kubectl -n "$DEV_NS" rollout status deploy/frontend --timeout=180s
+        '''
+      }
+    }
+
     stage('Discover Ingress & URLs') {
       steps {
         script {
@@ -128,23 +144,7 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          sed "s|__DEV_HOST__|$DEV_HOST|g" k8s/web/40-ingress.yaml | kubectl -n "$DEV_NS" apply -f -
-        '''
-      }
-    }
-
-    stage('Apply k8s manifests (DEV, first time only)') {
-      when { expression { return params.APPLY_MANIFESTS } }
-      steps { sh 'kubectl -n "$DEV_NS" apply -f "k8s/$DEV_NS"' }
-    }
-
-    stage('Deploy to DEV') {
-      steps {
-        sh '''
-          kubectl -n "$DEV_NS" set image deploy/backend  backend="$BACKEND_IMAGE"
-          kubectl -n "$DEV_NS" set image deploy/frontend frontend="$FRONTEND_IMAGE"
-          kubectl -n "$DEV_NS" rollout status deploy/backend  --timeout=180s
-          kubectl -n "$DEV_NS" rollout status deploy/frontend --timeout=180s
+          sed "s|dev-host|$DEV_HOST|g" k8s/web/40-ingress.yaml | kubectl -n "$DEV_NS" apply -f -
         '''
       }
     }
@@ -260,7 +260,7 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          sed "s|__PROD_HOST__|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
+          sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
         '''
       }
     }
@@ -317,7 +317,7 @@ pipeline {
           kubectl -n "$PROD_NS" apply -f k8s/prod/32-frontend-svc-canary.yaml
 
           # Canary ingress with weight
-          sed -e "s|__PROD_HOST__|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NS" apply -f -
+          sed -e "s|prod-host|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|$CANARY_WEIGHT|g" k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NS" apply -f -
 
           kubectl -n "$PROD_NS" rollout status deploy/backend-green --timeout=300s
           kubectl -n "$PROD_NS" rollout status deploy/frontend-green --timeout=300s
