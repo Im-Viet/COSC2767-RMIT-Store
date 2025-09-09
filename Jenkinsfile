@@ -42,19 +42,6 @@ pipeline {
           env.IMG_TAG = "${env.GIT_SHA}-${env.BUILD_NUMBER}"
           env.BACKEND_IMAGE = "${env.ECR}/${env.BACKEND_REPO}:${env.IMG_TAG}"
           env.FRONTEND_IMAGE = "${env.ECR}/${env.FRONTEND_REPO}:${env.IMG_TAG}"
-
-          // Get EC2 public DNS for this instance
-          def publicIP = sh(script: "curl -s --max-time 5 http://169.254.169.254/latest/meta-data/public-ipv4 || echo ''", returnStdout: true).trim()
-          if (publicIP == '' || publicIP == 'localhost') {
-            // Fallback to private IP if no public IP
-            publicIP = sh(script: "curl -s --max-time 5 http://169.254.169.254/latest/meta-data/local-ipv4 || echo ''", returnStdout: true).trim()
-          }
-          if (publicIP == '' || publicIP == 'localhost') {
-            // Final fallback - use hostname command
-            publicIP = sh(script: "hostname -I | awk '{print \$1}' || echo 'localhost'", returnStdout: true).trim()
-          }
-          env.PUBLIC_JENKINS_URL = "http://${publicIP}:8080"
-          echo "Public Jenkins URL: ${env.PUBLIC_JENKINS_URL}"
         }
         sh 'aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR"'
       }
@@ -472,7 +459,7 @@ YAML
              <b>Build #:</b> ${env.BUILD_NUMBER}<br/>
              <b>Status:</b> ${currentBuild.currentResult}<br/>
              <b>Branch:</b> ${env.BRANCH_NAME ?: 'main'}</p>
-          <p><a href="${env.PUBLIC_JENKINS_URL}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}">Open build</a></p>
+          <p><a href="${env.BUILD_URL}">Open build</a></p>
         '''
       )
     }
