@@ -124,11 +124,11 @@ pipeline {
           env.DEV_HOST  = devHost
           env.PROD_HOST = prodHost
 
-          env.E2E_BASE_URL  = "http://${devHost}:8080"
+          env.DEV_BASE_URL  = "http://${devHost}:8080"
           env.PROD_BASE_URL = "http://${prodHost}:8080"
 
           echo "LB Host: ${env.INGRESS_LB_HOST}, LB IP: ${env.INGRESS_LB_IP}"
-          echo "DEV:  ${env.E2E_BASE_URL}"
+          echo "DEV:  ${env.DEV_BASE_URL}"
           echo "PROD: ${env.PROD_BASE_URL}"
         }
       }
@@ -176,7 +176,7 @@ pipeline {
                   --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
                   -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
                   -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-                  -e E2E_BASE_URL="${E2E_BASE_URL}" \
+                  -e E2E_BASE_URL="${DEV_BASE_URL}" \
                   -v "$PWD":/work -w /work \
                   mcr.microsoft.com/playwright:v1.55.0-jammy \
                   bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test:e2e'
@@ -190,8 +190,6 @@ pipeline {
       }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
-
-    stage('Show DEV endpoint') { steps { echo "Visit: ${E2E_BASE_URL}" } }
 
     /* 3) Promote to PROD with canary */
     stage('Determine Deployment Color') {
