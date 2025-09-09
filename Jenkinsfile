@@ -192,7 +192,6 @@ pipeline {
               mcr.microsoft.com/playwright:v1.55.0-jammy \
               bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test:e2e'
           '''
-        }
       }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
