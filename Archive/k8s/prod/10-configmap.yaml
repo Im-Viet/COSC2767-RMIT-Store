@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app-config
-  namespace: prod
-data:
-  API_URL: "/api"
-  CLIENT_URL: "http://frontend-svc.prod.svc.cluster.local"

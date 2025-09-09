@@ -161,26 +161,69 @@ pipeline {
       }
     }
 
-    stage('Web UI E2E (Playwright, DEV)') {
+    stage('Wait DEV readiness') {
       steps {
         sh '''
-          docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
-          docker run --rm \
-            --shm-size=1g \
-            -u $(id -u):$(id -g) \
-            --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
-            -e HOME=/work \
-            -e NPM_CONFIG_CACHE=/work/.npm-cache \
-            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-            -e E2E_BASE_URL="${E2E_BASE_URL}" \
-            -v "$PWD":/work -w /work \
-            mcr.microsoft.com/playwright:v1.55.0-jammy \
-            bash -lc '
-              mkdir -p .npm-cache
-              npm ci --no-audit --no-fund
-              npm run test:e2e
-            '
+          set -euo pipefail
+          echo "Warming up DEV endpoints: $E2E_BASE_URL ..."
+          # Wait up to 90s for frontend 200 (or 3xx) on /
+          for i in $(seq 1 18); do
+            if curl -fsSI "${E2E_BASE_URL}/" >/dev/null 2>&1; then
+              echo "Frontend is responding."
+              break
+            fi
+            echo "Waiting for frontend... ($i/18)"
+            sleep 5
+          done
+
+          # Probe a simple API (adjust if needed)
+          for i in $(seq 1 18); do
+            if curl -fsS "${E2E_BASE_URL}/api/brand/list" >/dev/null 2>&1; then
+              echo "Backend API is responding."
+              break
+            fi
+            echo "Waiting for backend API... ($i/18)"
+            sleep 5
+          done
         '''
+      }
+    }
+
+    stage('Web UI E2E (Playwright, DEV)') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'seed-admin',
+                                        usernameVariable: 'SEED_ADMIN_EMAIL',
+                                        passwordVariable: 'SEED_ADMIN_PASSWORD')]) {
+          sh '''
+            set -euo pipefail
+            docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
+
+            # Quick smoke before tests — print first lines of HTML to confirm we hit the app
+            echo "----- FRONTEND HEADERS -----"
+            curl -i "${E2E_BASE_URL}/" | head -n 20 || true
+
+            echo "----- SAMPLE API CALL -----"
+            curl -sS "${E2E_BASE_URL}/api/brand/list" | head -c 400 || true
+            echo
+
+            docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
+              --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
+              -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
+              -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+              -e E2E_BASE_URL="${E2E_BASE_URL}" \
+              -e E2E_EMAIL="${SEED_ADMIN_EMAIL}" \
+              -e E2E_PASSWORD="${SEED_ADMIN_PASSWORD}" \
+              -v "$PWD":/work -w /work \
+              mcr.microsoft.com/playwright:v1.55.0-jammy \
+              bash -lc '
+                set -euo pipefail
+                mkdir -p .npm-cache
+                npm ci --no-audit --no-fund
+                # Give tests more time and collect trace on first retry
+                npx playwright test --reporter=html --timeout=90000 --retries=1 --trace on-first-retry
+              '
+          '''
+        }
       }
       post { always { archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true } }
     }
