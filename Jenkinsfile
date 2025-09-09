@@ -47,8 +47,12 @@ pipeline {
           env.FRONTEND_IMAGE = "${env.ECR}/${env.FRONTEND_REPO}:${env.IMG_TAG}"
 
           // Get EC2 public DNS for this instance
-          env.PUBLIC_JENKINS_URL = sh(script: "curl -s http://169.254.169.254/latest/meta-data/public-ipv4", returnStdout: true).trim()
-          env.PUBLIC_JENKINS_URL = "http://${env.PUBLIC_JENKINS_URL}:8080"
+          def publicIP = sh(script: "curl -s http://169.254.169.254/latest/meta-data/public-ipv4 || echo 'localhost'", returnStdout: true).trim()
+          if (publicIP == '' || publicIP == 'localhost') {
+            // Fallback to instance hostname if no public IP
+            publicIP = sh(script: "curl -s http://169.254.169.254/latest/meta-data/local-ipv4 || echo 'localhost'", returnStdout: true).trim()
+          }
+          env.PUBLIC_JENKINS_URL = "http://${publicIP}:8080"
           echo "Public Jenkins URL: ${env.PUBLIC_JENKINS_URL}"
         }
         sh 'aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR"'
@@ -251,8 +255,8 @@ pipeline {
 
           # Initial services point to new color
           echo "First deployment - pointing main services to $ACTIVE_COLOR"
-          kubectl -n "$PROD_NS" patch svc backend-svc -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"$ACTIVE_COLOR\"}}}"
-          kubectl -n "$PROD_NS" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"$ACTIVE_COLOR\"}}}"
+          kubectl -n "$PROD_NS" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'$ACTIVE_COLOR'"}}}'
+          kubectl -n "$PROD_NS" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'$ACTIVE_COLOR'"}}}'
         '''
       }
     }
@@ -423,8 +427,8 @@ YAML
           echo "Promoting $NEW_COLOR to 100% traffic"
           
           # Switch main services to new version
-          kubectl -n "$PROD_NS" patch svc backend-svc -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"$NEW_COLOR\"}}}"
-          kubectl -n "$PROD_NS" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"$NEW_COLOR\"}}}"
+          kubectl -n "$PROD_NS" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'$NEW_COLOR'"}}}'
+          kubectl -n "$PROD_NS" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'$NEW_COLOR'"}}}'
 
           # Remove canary ingress
           kubectl -n "$PROD_NS" delete ingress app-ingress-canary --ignore-not-found=true
@@ -467,7 +471,7 @@ YAML
              <b>Build #:</b> ${env.BUILD_NUMBER}<br/>
              <b>Status:</b> ${currentBuild.currentResult}<br/>
              <b>Branch:</b> ${env.BRANCH_NAME ?: 'main'}</p>
-          <p><a href="${params.JENKINS_PUBLIC_URL}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}">Open build</a></p>
+          <p><a href="${env.PUBLIC_JENKINS_URL}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}">Open build</a></p>
         '''
       )
     }
