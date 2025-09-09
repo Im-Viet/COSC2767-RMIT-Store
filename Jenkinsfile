@@ -271,46 +271,46 @@ pipeline {
           set -euo pipefail
           # GREEN deployments with new images
           cat <<YAML | kubectl -n "$PROD_NS" apply -f -
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata: { name: backend-green, labels: { app: backend, version: green } }
-          spec:
-            replicas: 1
-            selector: { matchLabels: { app: backend, version: green } }
-            template:
-              metadata: { labels: { app: backend, version: green } }
-              spec:
-                containers:
-                - name: backend
-                  image: "$BACKEND_IMAGE"
-                  ports: [ { containerPort: 3000 } ]
-                  env:
-                  - { name: PORT, value: "3000" }
-                  - { name: BASE_API_URL, value: "api" }
-                  - name: MONGO_URI
-                    valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
-                  - name: CLIENT_URL
-                    valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
-          ---
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata: { name: frontend-green, labels: { app: frontend, version: green } }
-          spec:
-            replicas: 1
-            selector: { matchLabels: { app: frontend, version: green } }
-            template:
-              metadata: { labels: { app: frontend, version: green } }
-              spec:
-                containers:
-                - name: frontend
-                  image: "$FRONTEND_IMAGE"
-                  ports: [ { containerPort: 8080 } ]
-                  env:
-                  - name: API_URL
-                    valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
-                  - { name: HOST, value: "0.0.0.0" }
-                  - { name: PORT, value: "8080" }
-          YAML
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: backend-green, labels: { app: backend, version: green } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: backend, version: green } }
+  template:
+    metadata: { labels: { app: backend, version: green } }
+    spec:
+      containers:
+      - name: backend
+        image: "$BACKEND_IMAGE"
+        ports: [ { containerPort: 3000 } ]
+        env:
+        - { name: PORT, value: "3000" }
+        - { name: BASE_API_URL, value: "api" }
+        - name: MONGO_URI
+          valueFrom: { secretKeyRef: { name: app-secrets, key: MONGO_URI } }
+        - name: CLIENT_URL
+          valueFrom: { configMapKeyRef: { name: app-config, key: CLIENT_URL } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: frontend-green, labels: { app: frontend, version: green } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: frontend, version: green } }
+  template:
+    metadata: { labels: { app: frontend, version: green } }
+    spec:
+      containers:
+      - name: frontend
+        image: "$FRONTEND_IMAGE"
+        ports: [ { containerPort: 8080 } ]
+        env:
+        - name: API_URL
+          valueFrom: { configMapKeyRef: { name: app-config, key: API_URL } }
+        - { name: HOST, value: "0.0.0.0" }
+        - { name: PORT, value: "8080" }
+YAML
 
           # Canary services (select GREEN)
           kubectl -n "$PROD_NS" apply -f k8s/prod/22-backend-svc-canary.yaml
