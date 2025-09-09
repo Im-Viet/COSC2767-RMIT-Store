@@ -199,7 +199,10 @@ pipeline {
           def currentActiveColor = sh(script: "kubectl -n ${env.PROD_NS} get svc backend-svc -o jsonpath='{.spec.selector.version}' 2>/dev/null || echo 'none'", returnStdout: true).trim()
           
           // Determine colors for this deployment
-          if (currentActiveColor == 'blue' || currentActiveColor == 'none') {
+          if (currentActiveColor == 'none') {
+            env.ACTIVE_COLOR = 'none'
+            env.NEW_COLOR = 'blue'  // Start with blue if no active color
+          } else if (currentActiveColor == 'blue') {
             env.ACTIVE_COLOR = 'blue'
             env.NEW_COLOR = 'green'
           } else {
@@ -211,7 +214,7 @@ pipeline {
           echo "Deploying new version to: ${env.NEW_COLOR}"
           
           // If this is first deployment and no active color, point main services to new color
-          if (currentActiveColor == 'none') {
+          if (${env.ACTIVE_COLOR} == 'none') {
             echo "First deployment detected - will point main services to ${env.NEW_COLOR} initially"
             env.IS_FIRST_DEPLOYMENT = 'true'
           } else {
@@ -241,9 +244,9 @@ pipeline {
           sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
 
           # Initial services point to new color
-          echo "First deployment - pointing main services to $ACTIVE_COLOR"
-          kubectl -n "$PROD_NS" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'$ACTIVE_COLOR'"}}}'
-          kubectl -n "$PROD_NS" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'$ACTIVE_COLOR'"}}}'
+          echo "First deployment - pointing main services to ${NEW_COLOR}"
+          kubectl -n "$PROD_NS" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'$NEW_COLOR'"}}}'
+          kubectl -n "$PROD_NS" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'$NEW     _COLOR'"}}}'
         '''
       }
     }
