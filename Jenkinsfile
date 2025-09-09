@@ -16,9 +16,7 @@ pipeline {
     string(name: 'BACKEND_REPO', defaultValue: 'rmit-store/backend', description: 'ECR repo path for backend')
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'ECR repo path for frontend')
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: true, description: 'Apply k8s/<DEV_NAMESPACE> manifests (first time only)')
-    booleanParam(name: 'APPLY_PROD_MANIFESTS', defaultValue: true, description: 'Apply k8s/<PROD_NAMESPACE> manifests (first time only)')
     booleanParam(name: 'SEED_DB', defaultValue: true, description: 'Run seed job on DEV after deploy')
-    // Optional overrides; if left as "auto", the pipeline discovers them from the ingress LB
     string(name: 'DEV_HOSTNAME',  defaultValue: 'auto', description: 'Dev hostname (auto -> dev.<lb-host>.nip.io)')
     string(name: 'PROD_HOSTNAME', defaultValue: 'auto', description: 'Prod hostname (auto -> prod.<lb-host>.nip.io)')
   }
@@ -47,6 +45,11 @@ pipeline {
           env.IMG_TAG = "${env.GIT_SHA}-${env.BUILD_NUMBER}"
           env.BACKEND_IMAGE = "${env.ECR}/${env.BACKEND_REPO}:${env.IMG_TAG}"
           env.FRONTEND_IMAGE = "${env.ECR}/${env.FRONTEND_REPO}:${env.IMG_TAG}"
+
+          // Get EC2 public DNS for this instance
+          env.PUBLIC_JENKINS_URL = sh(script: "curl -s http://169.254.169.254/latest/meta-data/public-ipv4", returnStdout: true).trim()
+          env.PUBLIC_JENKINS_URL = "http://${env.PUBLIC_JENKINS_URL}:8080"
+          echo "Public Jenkins URL: ${env.PUBLIC_JENKINS_URL}"
         }
         sh 'aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR"'
       }
@@ -147,7 +150,7 @@ pipeline {
       }
     }
 
-    stage('Seed database (DEV)') {
+    stage('Seed database') {
       when { expression { return params.SEED_DB } }
       steps {
         withCredentials([usernamePassword(credentialsId: 'seed-admin',
@@ -178,8 +181,8 @@ pipeline {
                 docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
                 docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
                   --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
-                  -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
-                  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+                  -e HOME=/work -v "${NPM_CONFIG_CACHE}:/work/.npm-cache" \
+                  -v "${PLAYWRIGHT_BROWSERS_PATH}:/ms-playwright" \
                   -e E2E_BASE_URL="${E2E_BASE_URL}" \
                   -v "$PWD":/work -w /work \
                   mcr.microsoft.com/playwright:v1.55.0-jammy \
@@ -198,31 +201,6 @@ pipeline {
     stage('Show DEV endpoint') { steps { echo "Visit: ${E2E_BASE_URL}" } }
 
     /* 3) Promote to PROD with canary */
-    stage('Init Prod Manifests (first time only)') {
-      when { expression { return params.APPLY_PROD_MANIFESTS } }
-      steps {
-        sh '''
-          set -euo pipefail
-          kubectl apply -f k8s/prod/00-namespace.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/10-configmap.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/11-secret.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/20-backend-deploy.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/21-backend-svc.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/30-frontend-deploy.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/31-frontend-svc.yaml
-        '''
-      }
-    }
-
-    stage('Apply Prod Ingress (base)') {
-      steps {
-        sh '''
-          set -euo pipefail
-          sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
-        '''
-      }
-    }
-
     stage('Determine Deployment Color') {
       steps {
         script {
@@ -252,7 +230,35 @@ pipeline {
       }
     }
 
+    stage('Init Prod Manifests (first time only)') {
+      when { expression { return env.IS_FIRST_DEPLOYMENT == 'true' } }
+      steps {
+        sh '''
+          set -euo pipefail
+          kubectl apply -f k8s/prod/00-namespace.yaml
+          kubectl -n "$PROD_NS" apply -f k8s/prod/10-configmap.yaml
+          kubectl -n "$PROD_NS" apply -f k8s/prod/11-secret.yaml
+
+          # Set images for deployments
+          sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/prod/20-backend-deploy.yaml | kubectl -n "$PROD_NS" apply -f -
+          sed "s|__IMAGE__|$FRONTEND_IMAGE|g" k8s/prod/30-frontend-deploy.yaml | kubectl -n "$PROD_NS" apply -f -
+          
+          kubectl -n "$PROD_NS" apply -f k8s/prod/21-backend-svc.yaml
+          kubectl -n "$PROD_NS" apply -f k8s/prod/31-frontend-svc.yaml
+
+          # Apply Prod Ingress (base)
+          sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
+
+          # Initial services point to new color
+          echo "First deployment - pointing main services to $NEW_COLOR"
+          kubectl -n "$PROD_NS" patch svc backend-svc -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"$NEW_COLOR\"}}}"
+          kubectl -n "$PROD_NS" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"$NEW_COLOR\"}}}"
+        '''
+      }
+    }
+
     stage('Deploy New Version') {
+      when { expression { return env.IS_FIRST_DEPLOYMENT != 'true' } }
       steps {
         sh '''
           set -euo pipefail
@@ -317,13 +323,6 @@ YAML
           # Wait for new deployments to be ready
           kubectl -n "$PROD_NS" rollout status deploy/backend-$NEW_COLOR --timeout=180s
           kubectl -n "$PROD_NS" rollout status deploy/frontend-$NEW_COLOR --timeout=180s
-          
-          # If this is first deployment, point main services to new version
-          if [ "$IS_FIRST_DEPLOYMENT" = "true" ]; then
-            echo "First deployment - pointing main services to $NEW_COLOR"
-            kubectl -n "$PROD_NS" patch svc backend-svc -p "{\"spec\":{\"selector\":{\"app\":\"backend\",\"version\":\"$NEW_COLOR\"}}}"
-            kubectl -n "$PROD_NS" patch svc frontend-svc -p "{\"spec\":{\"selector\":{\"app\":\"frontend\",\"version\":\"$NEW_COLOR\"}}}"
-          fi
         '''
       }
     }
@@ -356,8 +355,8 @@ YAML
                 docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
                 docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
                   --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
-                  -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
-                  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+                  -e HOME=/work -v "${NPM_CONFIG_CACHE}:/work/.npm-cache" \
+                  -v "${PLAYWRIGHT_BROWSERS_PATH}:/ms-playwright" \
                   -e E2E_BASE_URL="${PROD_BASE_URL}" \
                   -v "$PWD":/work -w /work \
                   mcr.microsoft.com/playwright:v1.55.0-jammy \
@@ -400,8 +399,8 @@ YAML
                 docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
                 docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
                   --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
-                  -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
-                  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+                  -e HOME=/work -v "${NPM_CONFIG_CACHE}:/work/.npm-cache" \
+                  -v "${PLAYWRIGHT_BROWSERS_PATH}:/ms-playwright" \
                   -e E2E_BASE_URL="${PROD_BASE_URL}" \
                   -v "$PWD":/work -w /work \
                   mcr.microsoft.com/playwright:v1.55.0-jammy \
@@ -468,7 +467,7 @@ YAML
              <b>Build #:</b> ${env.BUILD_NUMBER}<br/>
              <b>Status:</b> ${currentBuild.currentResult}<br/>
              <b>Branch:</b> ${env.BRANCH_NAME ?: 'main'}</p>
-          <p><a href="${env.BUILD_URL}">Open build</a></p>
+          <p><a href="${params.JENKINS_PUBLIC_URL}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}">Open build</a></p>
         '''
       )
     }
