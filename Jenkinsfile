@@ -273,7 +273,7 @@ pipeline {
           cat <<YAML | kubectl -n "$PROD_NS" apply -f -
 apiVersion: apps/v1
 kind: Deployment
-metadata: { name: backend-green, labels: { app: backend, version: green } }
+metadata: { name: backend-green, namespace: prod, labels: { app: backend, version: green } }
 spec:
   replicas: 1
   selector: { matchLabels: { app: backend, version: green } }
@@ -294,7 +294,7 @@ spec:
 ---
 apiVersion: apps/v1
 kind: Deployment
-metadata: { name: frontend-green, labels: { app: frontend, version: green } }
+metadata: { name: frontend-green, namespace: prod, labels: { app: frontend, version: green } }
 spec:
   replicas: 1
   selector: { matchLabels: { app: frontend, version: green } }
