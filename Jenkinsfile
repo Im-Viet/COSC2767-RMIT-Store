@@ -28,9 +28,6 @@ pipeline {
     PROD_NS = "${params.PROD_NAMESPACE}"
     BACKEND_REPO = "${params.BACKEND_REPO}"
     FRONTEND_REPO = "${params.FRONTEND_REPO}"
-
-    NPM_CONFIG_CACHE = "${JENKINS_HOME}/.npm-cache"
-    PLAYWRIGHT_BROWSERS_PATH = "${JENKINS_HOME}/.cache/ms-playwright"
     DOCKER_BUILDKIT = "1"
   }
 
@@ -47,10 +44,14 @@ pipeline {
           env.FRONTEND_IMAGE = "${env.ECR}/${env.FRONTEND_REPO}:${env.IMG_TAG}"
 
           // Get EC2 public DNS for this instance
-          def publicIP = sh(script: "curl -s http://169.254.169.254/latest/meta-data/public-ipv4 || echo 'localhost'", returnStdout: true).trim()
+          def publicIP = sh(script: "curl -s --max-time 5 http://169.254.169.254/latest/meta-data/public-ipv4 || echo ''", returnStdout: true).trim()
           if (publicIP == '' || publicIP == 'localhost') {
-            // Fallback to instance hostname if no public IP
-            publicIP = sh(script: "curl -s http://169.254.169.254/latest/meta-data/local-ipv4 || echo 'localhost'", returnStdout: true).trim()
+            // Fallback to private IP if no public IP
+            publicIP = sh(script: "curl -s --max-time 5 http://169.254.169.254/latest/meta-data/local-ipv4 || echo ''", returnStdout: true).trim()
+          }
+          if (publicIP == '' || publicIP == 'localhost') {
+            // Final fallback - use hostname command
+            publicIP = sh(script: "hostname -I | awk '{print \$1}' || echo 'localhost'", returnStdout: true).trim()
           }
           env.PUBLIC_JENKINS_URL = "http://${publicIP}:8080"
           echo "Public Jenkins URL: ${env.PUBLIC_JENKINS_URL}"
@@ -179,14 +180,14 @@ pipeline {
       steps {
         script {
           try {
-            timeout(time: 3, unit: 'MINUTES') {
+            timeout(time: 2, unit: 'MINUTES') {
               sh '''
                 set -euo pipefail
                 docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
                 docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
                   --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
-                  -e HOME=/work -v "${NPM_CONFIG_CACHE}:/work/.npm-cache" \
-                  -v "${PLAYWRIGHT_BROWSERS_PATH}:/ms-playwright" \
+                  -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
+                  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
                   -e E2E_BASE_URL="${E2E_BASE_URL}" \
                   -v "$PWD":/work -w /work \
                   mcr.microsoft.com/playwright:v1.55.0-jammy \
@@ -352,15 +353,15 @@ YAML
       steps {
         script {
           try {
-            timeout(time: 3, unit: 'MINUTES') {
+            timeout(time: 2, unit: 'MINUTES') {
               sh '''
                 set -euo pipefail
                 echo "Testing canary deployment with 10% traffic..."
                 docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
                 docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
                   --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
-                  -e HOME=/work -v "${NPM_CONFIG_CACHE}:/work/.npm-cache" \
-                  -v "${PLAYWRIGHT_BROWSERS_PATH}:/ms-playwright" \
+                  -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
+                  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
                   -e E2E_BASE_URL="${PROD_BASE_URL}" \
                   -v "$PWD":/work -w /work \
                   mcr.microsoft.com/playwright:v1.55.0-jammy \
@@ -396,15 +397,15 @@ YAML
       steps {
         script {
           try {
-            timeout(time: 3, unit: 'MINUTES') {
+            timeout(time: 2, unit: 'MINUTES') {
               sh '''
                 set -euo pipefail
                 echo "Testing canary deployment with 50% traffic..."
                 docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
                 docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
                   --add-host ${PROD_HOST}:${INGRESS_LB_IP} \
-                  -e HOME=/work -v "${NPM_CONFIG_CACHE}:/work/.npm-cache" \
-                  -v "${PLAYWRIGHT_BROWSERS_PATH}:/ms-playwright" \
+                  -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
+                  -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
                   -e E2E_BASE_URL="${PROD_BASE_URL}" \
                   -v "$PWD":/work -w /work \
                   mcr.microsoft.com/playwright:v1.55.0-jammy \
