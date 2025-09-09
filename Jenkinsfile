@@ -82,7 +82,7 @@ pipeline {
             -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
             -e NODE_ENV=test \
             -v "$PWD/server":/work -w /work \
-            node:22-alpine bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test'
+            node:22-alpine sh -c 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test'
         '''
       }
       post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
