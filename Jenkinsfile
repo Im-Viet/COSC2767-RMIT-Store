@@ -123,7 +123,7 @@ pipeline {
             lbHost = sh(script: "kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
           }
           env.INGRESS_LB_HOST = lbHost
-          env.INGRESS_LB_IP   = sh(script: "getent hosts ${lbHost} | awk '{print $1}' | head -n1 || dig +short ${lbHost} | head -n1", returnStdout: true).trim()
+          env.INGRESS_LB_IP   = sh(script: "getent hosts ${lbHost} | awk '{print \$1}' | head -n1 || dig +short ${lbHost} | head -n1", returnStdout: true).trim()
 
           def devHost  = params.DEV_HOSTNAME  == 'auto' ? "dev.${lbHost}.nip.io"  : params.DEV_HOSTNAME
           def prodHost = params.PROD_HOSTNAME == 'auto' ? "prod.${lbHost}.nip.io" : params.PROD_HOSTNAME
