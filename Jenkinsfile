@@ -214,7 +214,7 @@ pipeline {
           echo "Deploying new version to: ${env.NEW_COLOR}"
           
           // If this is first deployment and no active color, point main services to new color
-          if (${env.ACTIVE_COLOR} == 'none') {
+          if (env.ACTIVE_COLOR == 'none') {
             echo "First deployment detected - will point main services to ${env.NEW_COLOR} initially"
             env.IS_FIRST_DEPLOYMENT = 'true'
           } else {
