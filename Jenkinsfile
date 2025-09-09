@@ -175,14 +175,6 @@ pipeline {
           sh '''
             set -euo pipefail
             docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
-
-            echo "----- FRONTEND HEADERS -----"
-            curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -i "${E2E_BASE_URL}/" | head -n 20 || true
-
-            echo "----- SAMPLE API CALL -----"
-            curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -sS "${E2E_BASE_URL}/api/brand/list" | head -c 400 || true
-            echo
-
             docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
               --add-host ${DEV_HOST}:${INGRESS_LB_IP} \
               -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
@@ -215,14 +207,14 @@ pipeline {
       }
     }
 
-    // stage('Apply Prod Ingress (base)') {
-    //   steps {
-    //     sh '''
-    //       set -euo pipefail
-    //       sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
-    //     '''
-    //   }
-    // }
+    stage('Apply Prod Ingress (base)') {
+      steps {
+        sh '''
+          set -euo pipefail
+          sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
+        '''
+      }
+    }
 
     stage('Start Canary in PROD') {
       steps {
