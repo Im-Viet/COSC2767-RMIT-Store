@@ -434,6 +434,10 @@ YAML
         '''
       }
     }
+
+    stage('Prod Website') {
+      steps { sh 'echo "You can access the PROD website at: ${PROD_BASE_URL}"' }
+    }
   } // stages
 
   post {
