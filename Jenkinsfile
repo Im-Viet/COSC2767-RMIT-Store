@@ -449,12 +449,24 @@ YAML
       sh '''
         kubectl -n "$PROD_NS" delete ingress app-ingress-canary --ignore-not-found=true
         
-        # If NEW_COLOR is defined, clean up the failed deployment
+        # If NEW_COLOR is defined, clean up the failed deployment and rollback to previous stable version
         if [ -n "${NEW_COLOR:-}" ]; then
           kubectl -n "$PROD_NS" delete svc backend-svc-$NEW_COLOR --ignore-not-found=true
           kubectl -n "$PROD_NS" delete svc frontend-svc-$NEW_COLOR --ignore-not-found=true
           kubectl -n "$PROD_NS" delete deploy backend-$NEW_COLOR --ignore-not-found=true
           kubectl -n "$PROD_NS" delete deploy frontend-$NEW_COLOR --ignore-not-found=true
+          
+          # Rollback: Scale up the previous stable version and point services to it
+          if [ "${ACTIVE_COLOR:-}" != "none" ]; then
+            echo "Rolling back to previous stable version: $ACTIVE_COLOR"
+            kubectl -n "$PROD_NS" scale deploy backend-$ACTIVE_COLOR --replicas=1 || true
+            kubectl -n "$PROD_NS" scale deploy frontend-$ACTIVE_COLOR --replicas=1 || true
+            
+            # Point main services back to the stable version
+            kubectl -n "$PROD_NS" patch svc backend-svc -p '{"spec":{"selector":{"app":"backend","version":"'$ACTIVE_COLOR'"}}}'
+            kubectl -n "$PROD_NS" patch svc frontend-svc -p '{"spec":{"selector":{"app":"frontend","version":"'$ACTIVE_COLOR'"}}}'
+            echo "Rollback completed - services now pointing to $ACTIVE_COLOR"
+          fi
         fi
         
         kubectl -n "$PROD_NS" get deploy -o wide || true
