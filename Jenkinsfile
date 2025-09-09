@@ -72,6 +72,22 @@ pipeline {
       }
     }
 
+    stage('Backend: Unit + Integration tests') {
+      steps {
+        sh '''
+          set -euo pipefail
+
+          echo "Running backend tests with mongodb-memory-server..."
+          docker run --rm --init -u $(id -u):$(id -g) \
+            -e HOME=/work -e NPM_CONFIG_CACHE=/work/.npm-cache \
+            -e NODE_ENV=test \
+            -v "$PWD/server":/work -w /work \
+            node:22-alpine bash -lc 'mkdir -p .npm-cache && npm ci --no-audit --no-fund && npm run test'
+        '''
+      }
+      post { always { junit allowEmptyResults: true, testResults: 'server/junit.xml' } }
+    }
+
     stage('Build & Push Images') {
       steps {
         sh '''
