@@ -436,7 +436,7 @@ YAML
     }
 
     stage('Prod Website') {
-      steps { sh 'echo "You can access the PROD website at: ${PROD_BASE_URL}"' }
+      steps { sh 'You can access the PROD website at: ${PROD_BASE_URL}' }
     }
   } // stages
 
@@ -472,10 +472,27 @@ YAML
     always {
       archiveArtifacts artifacts: '**/Dockerfile, k8s/**/*.yaml', fingerprint: true, onlyIfSuccessful: false
     }
-    success {
-      echo "✅ Deployed images:"
-      echo "   $BACKEND_IMAGE"
-      echo "   $FRONTEND_IMAGE"
+    success {      
+      emailext(
+        subject: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        to: '$DEFAULT_RECIPIENTS',
+        body: '''
+          <h2>Deployment Successful! 🎉</h2>
+          <p><b>Job:</b> ${env.JOB_NAME}<br/>
+             <b>Build #:</b> ${env.BUILD_NUMBER}<br/>
+             <b>Status:</b> ${currentBuild.currentResult}<br/>
+             <b>Branch:</b> ${env.BRANCH_NAME ?: 'main'}<br/>
+             <b>Duration:</b> ${currentBuild.durationString}</p>
+          
+          <h3>Environment URLs:</h3>
+          <ul>
+            <li><b>DEV:</b> <a href="${env.DEV_BASE_URL}">${env.DEV_BASE_URL}</a></li>
+            <li><b>PROD:</b> <a href="${env.PROD_BASE_URL}">${env.PROD_BASE_URL}</a></li>
+          </ul>
+          
+          <p><a href="${env.BUILD_URL}">View build details</a></p>
+        '''
+      )
     }
   }
 }
