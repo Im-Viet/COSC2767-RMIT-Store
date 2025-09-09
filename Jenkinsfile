@@ -270,7 +270,7 @@ pipeline {
         sh '''
           set -euo pipefail
           # GREEN deployments with new images
-          cat <<'YAML' | kubectl -n "$PROD_NS" apply -f -
+          cat <<YAML | kubectl -n "$PROD_NS" apply -f -
           apiVersion: apps/v1
           kind: Deployment
           metadata: { name: backend-green, labels: { app: backend, version: green } }
