@@ -166,9 +166,10 @@ pipeline {
         sh '''
           set -euo pipefail
           echo "Warming up DEV endpoints: $E2E_BASE_URL ..."
-          # Wait up to 90s for frontend 200 (or 3xx) on /
+
+          # Frontend readiness via --resolve (bypass DNS)
           for i in $(seq 1 18); do
-            if curl -fsSI "${E2E_BASE_URL}/" >/dev/null 2>&1; then
+            if curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -fsSI "${E2E_BASE_URL}/" >/dev/null 2>&1; then
               echo "Frontend is responding."
               break
             fi
@@ -176,9 +177,9 @@ pipeline {
             sleep 5
           done
 
-          # Probe a simple API (adjust if needed)
+          # Backend readiness via --resolve (bypass DNS)
           for i in $(seq 1 18); do
-            if curl -fsS "${E2E_BASE_URL}/api/brand/list" >/dev/null 2>&1; then
+            if curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -fsS "${E2E_BASE_URL}/api/brand/list" >/dev/null 2>&1; then
               echo "Backend API is responding."
               break
             fi
@@ -198,12 +199,11 @@ pipeline {
             set -euo pipefail
             docker pull mcr.microsoft.com/playwright:v1.55.0-jammy
 
-            # Quick smoke before tests — print first lines of HTML to confirm we hit the app
             echo "----- FRONTEND HEADERS -----"
-            curl -i "${E2E_BASE_URL}/" | head -n 20 || true
+            curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -i "${E2E_BASE_URL}/" | head -n 20 || true
 
             echo "----- SAMPLE API CALL -----"
-            curl -sS "${E2E_BASE_URL}/api/brand/list" | head -c 400 || true
+            curl --resolve "${DEV_HOST}:8080:${INGRESS_LB_IP}" -sS "${E2E_BASE_URL}/api/brand/list" | head -c 400 || true
             echo
 
             docker run --rm --shm-size=1g -u $(id -u):$(id -g) \
