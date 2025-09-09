@@ -332,7 +332,7 @@ YAML
           sed -e "s|prod-host|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|10|g" -e "s|__NEW_COLOR__|$NEW_COLOR|g" k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NS" apply -f -
           
           echo "Canary deployment started - 10% of traffic going to $NEW_COLOR"
-          sleep 10  # Allow some time for traffic to flow
+          sleep 5  # Allow some time for traffic to flow
         '''
       }
     }
@@ -376,7 +376,7 @@ YAML
           sed -e "s|prod-host|$PROD_HOST|g" -e "s|__CANARY_WEIGHT__|50|g" -e "s|__NEW_COLOR__|$NEW_COLOR|g" k8s/prod/45-ingress-canary.yaml | kubectl -n "$PROD_NS" apply -f -
           
           echo "Canary traffic increased - 50% of traffic now going to $NEW_COLOR"
-          sleep 10  # Allow some time for traffic to flow
+          sleep 5  # Allow some time for traffic to flow
         '''
       }
     }
@@ -436,7 +436,10 @@ YAML
     }
 
     stage('Prod Website') {
-      steps { sh 'You can access the PROD website at: ${PROD_BASE_URL}' }
+      steps { 
+        echo "✅ PROD website is available at: ${env.PROD_BASE_URL}"
+        echo "🚀 Deployment completed successfully!"
+      }
     }
   } // stages
 
@@ -459,14 +462,14 @@ YAML
       emailext(
         subject: "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
         to: '$DEFAULT_RECIPIENTS',
-        body: '''
+        body: """
           <h2>Build Failed</h2>
           <p><b>Job:</b> ${env.JOB_NAME}<br/>
              <b>Build #:</b> ${env.BUILD_NUMBER}<br/>
              <b>Status:</b> ${currentBuild.currentResult}<br/>
              <b>Branch:</b> ${env.BRANCH_NAME ?: 'main'}</p>
           <p><a href="${env.BUILD_URL}">Open build</a></p>
-        '''
+        """
       )
     }
     always {
@@ -476,7 +479,7 @@ YAML
       emailext(
         subject: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
         to: '$DEFAULT_RECIPIENTS',
-        body: '''
+        body: """
           <h2>Deployment Successful! 🎉</h2>
           <p><b>Job:</b> ${env.JOB_NAME}<br/>
              <b>Build #:</b> ${env.BUILD_NUMBER}<br/>
@@ -491,7 +494,7 @@ YAML
           </ul>
           
           <p><a href="${env.BUILD_URL}">View build details</a></p>
-        '''
+        """
       )
     }
   }
