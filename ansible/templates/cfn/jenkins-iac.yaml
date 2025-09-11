@@ -55,9 +55,9 @@ Resources:
                 install -o root -g root -m 0700 -d /etc/jenkins
                 umask 077
                 cat >/etc/jenkins/jenkins.env <<EOF
-                GH_PAT=${GH_PAT}
-                SMTP_USER=${SMTP_USER}
-                SMTP_PASS=${SMTP_PASS}
+                GH_PAT=$GH_PAT
+                SMTP_USER=$SMTP_USER
+                SMTP_PASS=$SMTP_PASS
                 EOF
                 chmod 0600 /etc/jenkins/jenkins.env
 
@@ -66,7 +66,6 @@ Resources:
                   -d /var/lib/jenkins/ansible-src \
                   -U ${RepoUrl} ansible/playbooks/configure-jenkins-host.yml \
                   -i localhost, \
-                  -e env=${Env} \
                   -e jenkins_url=http://${JenkinsEip.PublicIp}:8080/ \
                   -e mongodb_private_ip=${MongoPrivateIpFromExport} \
                   -e mongodb_instance_id=${MongoInstanceIdFromExport}
@@ -112,7 +111,7 @@ Conditions:
 
 Mappings:
   RegionMap:
-    us-east-1: { AMI: ami-0c7217cdde317cfec }
+    us-east-1: { AMI: ami-0b09ffb6d8b58ca91 }  # Amazon Linux 2023 (sample)
 
 Outputs:
   PublicElasticIp: { Value: !GetAtt JenkinsEip.PublicIp, Description: "Elastic IP attached to Jenkins" }

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "MongoDB EC2 in default VPC. Opens 27017 to VPC & Jenkins SG; SSH from Jenkins SG."
+Description: "MongoDB EC2"
 Parameters:
   VpcId:          { Type: AWS::EC2::VPC::Id, Description: "VPC ID (default VPC)" }
   SubnetId:       { Type: AWS::EC2::Subnet::Id, Description: "Subnet ID (public subnet preferred)" }
@@ -39,7 +39,7 @@ Conditions:
 
 Mappings:
   RegionMap:
-    us-east-1: { AMI: ami-0c7217cdde317cfec }  # Amazon Linux 2023 (sample)
+    us-east-1: { AMI: ami-0b09ffb6d8b58ca91 }  # Amazon Linux 2023 (sample)
 
 Outputs:
   MongoPrivateIp: { Value: !GetAtt MongoInstance.PrivateIp, Description: "Private IP of MongoDB EC2", Export: { Name: !Sub "${AWS::StackName}-MongoPrivateIp" } }
