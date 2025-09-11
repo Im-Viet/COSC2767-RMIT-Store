@@ -44,7 +44,9 @@ credentials:
               password: "${SMTP_PASS:-}"
               description: "SMTP app password"
 
-system:
+unclassified:
+  globalTimeZone:
+    timeZone: "Asia/Ho_Chi_Minh"
   location:
     url: "${JENKINS_URL:-}"
     adminAddress: "${JENKINS_ADMIN_EMAIL:-}"

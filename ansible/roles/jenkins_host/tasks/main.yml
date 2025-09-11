@@ -115,6 +115,7 @@
       build-timeout
       github-branch-source
       docker-pipeline
+      global-time-zone
     owner: jenkins
     group: jenkins
     mode: '0644'
