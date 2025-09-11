@@ -1,0 +1,14 @@
+---
+- hosts: mongodb
+  gather_facts: false           # we can't gather facts until Python exists
+  become: true
+
+  pre_tasks:
+    - name: Ensure python3 exists for Ansible modules
+      raw: test -e /usr/bin/python3 || sudo dnf -y install python3
+
+    - name: Gather facts after bootstrapping python
+      setup:
+
+  roles:
+    - mongodb_host

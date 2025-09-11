@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "EKS Cluster + Managed Node Group (Learner Lab friendly). Uses existing LabRole."
+Parameters:
+  ClusterName:    { Type: String, Default: rmit-eks }
+  K8sVersion:     { Type: AWS::EKS::KubernetesVersion, Default: "1.33" }
+  SubnetIds:      { Type: List<AWS::EC2::Subnet::Id>, Description: "At least two subnets in default VPC" }
+  ClusterRoleArn: { Type: AWS::IAM::Role::Arn, Description: "Use LabRole ARN (IAM pre-provided by lab)" }
+  NodeRoleArn:    { Type: AWS::IAM::Role::Arn, Description: "Use LabRole ARN (IAM pre-provided by lab)" }
+  AccessPrincipalArn: { Type: AWS::IAM::Role::Arn, Description: "IAM principal ARN to grant cluster access (e.g., LabRole)" }
+  NodeGroupName:  { Type: String, Default: ng }
+  InstanceType:   { Type: String, Default: t3.medium }
+  DesiredSize:    { Type: Number, Default: 2 }
+  MinSize:        { Type: Number, Default: 2 }
+  MaxSize:        { Type: Number, Default: 2 }
+
+Resources:
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref ClusterName
+      Version: !Ref K8sVersion
+      RoleArn: !Ref ClusterRoleArn
+      ResourcesVpcConfig:
+        SubnetIds: !Ref SubnetIds
+        EndpointPublicAccess: true
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+        BootstrapClusterCreatorAdminPermissions: true
+
+  ClusterAccessForLabRole:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName: !Ref ClusterName
+      PrincipalArn: !Ref AccessPrincipalArn
+      Type: STANDARD
+      AccessPolicies:
+        - PolicyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy"
+          AccessScope: { Type: cluster }
+        - PolicyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          AccessScope: { Type: cluster }
+        - PolicyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
+          AccessScope: { Type: cluster }
+        - PolicyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+          AccessScope: { Type: cluster }
+
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref ClusterName
+      NodegroupName: !Ref NodeGroupName
+      NodeRole: !Ref NodeRoleArn
+      Subnets: !Ref SubnetIds
+      ScalingConfig:
+        DesiredSize: !Ref DesiredSize
+        MinSize: !Ref MinSize
+        MaxSize: !Ref MaxSize
+      InstanceTypes: [ !Ref InstanceType ]
+      AmiType: AL2_x86_64
+      NodegroupName: ng
+
+Outputs:
+  ClusterNameOut: { Value: !Ref ClusterName }

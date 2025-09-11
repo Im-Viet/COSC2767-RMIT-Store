@@ -1,0 +1,22 @@
+---
+- name: Ensure DEV/PROD namespaces exist
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item }}"
+  loop:
+    - "{{ dev_namespace }}"
+    - "{{ prod_namespace }}"
+
+- name: Apply app-config ConfigMap for current namespace
+  kubernetes.core.k8s:
+    state: present
+    template: app-config.yaml.j2
+
+- name: Apply app-secrets Secret for current namespace
+  kubernetes.core.k8s:
+    state: present
+    template: app-secrets.yaml.j2

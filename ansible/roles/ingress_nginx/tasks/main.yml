@@ -1,0 +1,29 @@
+---
+- name: Add ingress-nginx Helm repo
+  kubernetes.core.helm_repository:
+    name: ingress-nginx
+    repo_url: https://kubernetes.github.io/ingress-nginx
+
+- name: Install/upgrade ingress-nginx
+  kubernetes.core.helm:
+    name: ingress-nginx
+    chart_ref: ingress-nginx/ingress-nginx
+    release_namespace: ingress-nginx
+    create_namespace: true
+    wait: true
+    values:
+      controller:
+        service:
+          type: LoadBalancer
+
+- name: Patch ingress-nginx-controller service port to 8080
+  kubernetes.core.k8s_json_patch:
+    api_version: v1
+    kind: Service
+    namespace: ingress-nginx
+    name: ingress-nginx-controller
+    patch:
+      - op: replace
+        path: /spec/ports/0/port
+        value: 8080
+  ignore_errors: true

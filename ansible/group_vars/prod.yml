@@ -1,0 +1,6 @@
+# ===== PROD variables =====
+namespace: "{{ prod_namespace }}"
+ingress_host: "{{ lookup('env','PROD_HOSTNAME') | default('auto', true) }}"
+
+# Secrets for PROD (recommend storing with ansible-vault)
+mongo_uri: "{{ mongo_uri_base }}"

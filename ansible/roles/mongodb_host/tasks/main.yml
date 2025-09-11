@@ -1,0 +1,57 @@
+---
+- name: Set hostname
+  ansible.builtin.hostname: { name: mongodb }
+
+- name: Install Docker
+  ansible.builtin.package: { name: docker, state: present }
+
+- name: Enable and start Docker
+  ansible.builtin.service: { name: docker, enabled: true, state: started }
+
+- name: Install Python and pip
+  ansible.builtin.package:
+    name: [python3, python3-pip]
+    state: present
+
+- name: Install Docker SDK for Python (for community.docker.* modules)
+  ansible.builtin.pip:
+    name: docker
+    executable: pip3
+
+- name: Add ec2-user to docker group
+  ansible.builtin.user: { name: ec2-user, groups: docker, append: true }
+
+- name: Run MongoDB container
+  community.docker.docker_container:
+    name: rmit-mongo
+    image: mongo:7
+    state: started
+    restart_policy: always
+    published_ports:
+      - "27017:27017"
+    env:
+      MONGO_INITDB_ROOT_USERNAME: "{{ mongo_root_user | default('siteAdmin') }}"
+      MONGO_INITDB_ROOT_PASSWORD: "{{ mongo_root_password | default('siteAdmin123') }}"
+
+- name: Wait for MongoDB
+  ansible.builtin.wait_for: { host: 127.0.0.1, port: 27017, delay: 3, timeout: 120 }
+
+- name: Create application user rmitapp on rmit-store
+  ansible.builtin.shell: |
+    docker exec rmit-mongo mongosh -u "{{ mongo_root_user | default('siteAdmin') }}" -p "{{ mongo_root_password | default('siteAdmin123') }}" --authenticationDatabase admin --eval '
+      db.getSiblingDB("rmit-store").createUser({
+        user:"{{ mongo_app_user | default('rmitapp') }}",
+        pwd:"{{ mongo_app_password | default('rmitapp123') }}",
+        roles:[{role:"readWrite", db:"rmit-store"}]
+      })'
+  args: { executable: /bin/bash }
+  register: create_user
+  changed_when: "'ok' in create_user.stdout or create_user.rc == 0"
+  failed_when: false
+
+- name: Ping DB with app user
+  ansible.builtin.shell: |
+    docker exec rmit-mongo mongosh "mongodb://{{ mongo_app_user | default('rmitapp') }}:{{ mongo_app_password | default('rmitapp123') }}@localhost:27017/rmit-store?authSource=rmit-store" --eval 'db.runCommand({ ping: 1 })'
+  args: { executable: /bin/bash }
+  register: ping_db
+  changed_when: false

@@ -1,0 +1,20 @@
+---
+# Validate required CLIs are available on the Jenkins host (local)
+- name: Check aws, kubectl, and helm CLIs are available
+  command: "{{ item }} version"
+  register: cli_check
+  changed_when: false
+  failed_when: cli_check.rc != 0
+  loop:
+    - aws
+    - kubectl
+    - helm
+
+# Ensure kubeconfig is set for the EKS cluster (expects Jenkins has AWS CLI perms)
+- name: Update kubeconfig for EKS cluster
+  ansible.builtin.shell: |
+    set -euo pipefail
+    aws eks update-kubeconfig --region "{{ aws_region }}" --name "{{ eks_cluster }}"
+  args:
+    executable: /bin/bash
+  changed_when: false

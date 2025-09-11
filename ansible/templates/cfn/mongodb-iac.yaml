@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "MongoDB EC2 in default VPC. Opens 27017 to VPC & Jenkins SG; SSH from Jenkins SG."
+Parameters:
+  VpcId:          { Type: AWS::EC2::VPC::Id, Description: "VPC ID (default VPC)" }
+  SubnetId:       { Type: AWS::EC2::Subnet::Id, Description: "Subnet ID (public subnet preferred)" }
+  KeyName:        { Type: AWS::EC2::KeyPair::KeyName, Default: "", Description: "Optional EC2 key pair for SSH" }
+  InstanceType:   { Type: String, Default: t3.small }
+  VolumeSize:     { Type: Number, Default: 20 }
+  EverywhereCidr: { Type: String, Default: 0.0.0.0/0 }
+Resources:
+  MongoSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "MongoDB SG"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref EverywhereCidr }
+        - { IpProtocol: tcp, FromPort: 27017, ToPort: 27017, CidrIp: !Ref EverywhereCidr }
+
+  MongoInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: LabInstanceProfile
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      KeyName: !If [HasKey, !Ref KeyName, !Ref "AWS::NoValue" ]
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: !Ref SubnetId
+          GroupSet: [ !Ref MongoSg ]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: !Ref VolumeSize, VolumeType: gp3 }
+      Tags: [ { Key: Name, Value: mongo-db } ]
+
+Conditions:
+  HasKey: { "Fn::Not": [ { "Fn::Equals": [ !Ref KeyName, "" ] } ] }
+
+Mappings:
+  RegionMap:
+    us-east-1: { AMI: ami-0c7217cdde317cfec }  # Amazon Linux 2023 (sample)
+
+Outputs:
+  MongoPrivateIp: { Value: !GetAtt MongoInstance.PrivateIp, Description: "Private IP of MongoDB EC2", Export: { Name: !Sub "${AWS::StackName}-MongoPrivateIp" } }
+  MongoInstanceId: { Value: !Ref MongoInstance, Export: { Name: !Sub "${AWS::StackName}-MongoInstanceId" } }
+  MongoSecurityGroupId: { Value: !Ref MongoSg, Description: "Security Group ID of MongoDB EC2" }

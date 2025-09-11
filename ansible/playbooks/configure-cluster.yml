@@ -1,0 +1,20 @@
+---
+# Configure cluster-level components & app config for the selected environment
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    env: "{{ env | default('dev') }}"
+    namespace: "{{ dev_namespace if env == 'dev' else prod_namespace }}"
+  tasks:
+    - name: Prepare CLIs and kubeconfig
+      import_role:
+        name: eks_tools
+
+    - name: Install/upgrade ingress-nginx controller
+      import_role:
+        name: ingress_nginx
+
+    - name: Apply K8s ConfigMap and Secret for this namespace
+      import_role:
+        name: k8s_config

@@ -1,0 +1,12 @@
+# Shared variables (override via Jenkins environment or --extra-vars as needed)
+aws_region: "{{ lookup('env','REGION') | default('us-east-1', true) }}"
+eks_cluster: "{{ lookup('env','EKS_CLUSTER') | default('rmit-eks', true) }}"
+dev_namespace: "{{ lookup('env','DEV_NAMESPACE') | default('dev', true) }}"
+prod_namespace: "{{ lookup('env','PROD_NAMESPACE') | default('prod', true) }}"
+
+# For SSM inventory – falls back if env var isn't set
+mongodb_instance_id: "{{ lookup('env','MONGODB_INSTANCE_ID') | default('', true) }}"
+mongodb_private_ip:  "{{ lookup('env','MONGODB_PRIVATE_IP')  | default('', true) }}"
+
+# MongoDB connection string base
+mongo_uri_base: "mongodb://rmitapp:rmitapp123@{{ mongodb_private_ip }}:27017/rmit-store?authSource=rmit-store"

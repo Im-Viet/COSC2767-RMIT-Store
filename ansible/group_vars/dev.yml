@@ -1,0 +1,6 @@
+# ===== DEV variables =====
+namespace: "{{ dev_namespace }}"
+ingress_host: "{{ lookup('env','DEV_HOSTNAME') | default('auto', true) }}"
+
+# Secrets for DEV (recommend storing with ansible-vault)
+mongo_uri: "{{ mongo_uri_base }}"

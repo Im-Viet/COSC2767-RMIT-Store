@@ -1,0 +1,7 @@
+---
+- hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  roles:
+    - jenkins_host # does Docker/Jenkins/Node/kubectl/helm/yq/tmpfs/PATH override etc.

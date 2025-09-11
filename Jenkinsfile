@@ -47,6 +47,23 @@ pipeline {
       }
     }
 
+    stage('Ansible: Setup') {
+      steps {
+        sh '''
+          set -euo pipefail
+          if ! command -v ansible-playbook >/dev/null; then
+            echo "[i] Installing Ansible (pip)"
+            python3 -m pip install --user --upgrade pip setuptools wheel
+            python3 -m pip install --user ansible==9.7.0 kubernetes openshift
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
+          # Install Ansible collections for Kubernetes/Helm
+          ansible-galaxy collection install kubernetes.core community.general --force
+        '''
+      }
+    }
+
     stage('Ensure ECR repositories') {
       steps {
         sh '''
@@ -106,6 +123,18 @@ pipeline {
     /* 2) Deploy to DEV and test */
     stage('Configure kubectl') {
       steps { sh 'aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER"' }
+    }
+
+    stage('Config (Ansible DEV)') {
+      when { expression { return params.APPLY_MANIFESTS } }
+      steps {
+        sh '''
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          # Reuse Jenkins AWS + EKS env variables
+          ansible-playbook -i ansible/inventories/dev/hosts.ini ansible/playbooks/configure-cluster.yml -e env=dev
+        '''
+      }
     }
 
     stage('Apply k8s manifests (DEV, first time only)') {
@@ -208,6 +237,17 @@ pipeline {
     }
 
     /* 3) Promote to PROD with canary */
+    stage('Config (Ansible PROD)') {
+      when { branch 'main' }
+      steps {
+        sh '''
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          ansible-playbook -i ansible/inventories/prod/hosts.ini ansible/playbooks/configure-cluster.yml -e env=prod
+        '''
+      }
+    }
+
     stage('Determine Deployment Color') {
       steps {
         script {

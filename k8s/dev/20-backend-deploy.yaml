@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: 293113319402.dkr.ecr.us-east-1.amazonaws.com/rmit-store/backend:latest
+        image: __IMAGE__ # will be updated by Jenkins 'set image'
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000

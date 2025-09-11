@@ -1,0 +1,83 @@
+jenkins:
+  systemMessage: |
+    Managed by Jenkins Configuration as Code (JCasC).
+    Do not edit via UI; commit changes to jenkins.yaml instead.
+  mode: NORMAL
+  numExecutors: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_ID:-admin}"
+          password: "${JENKINS_ADMIN_PW:-admin}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  remotingSecurity:
+    enabled: true
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "seed-admin"
+              username: "${SEED_ADMIN_EMAIL:-admin@rmit.edu.vn}"
+              password: "${SEED_ADMIN_PASSWORD:-mypassword}"
+              description: "Seed admin account for seeding job"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "github-public-repo-credentials"
+              username: "${GITHUB_USER:-Im-Viet}"
+              password: "${GH_PAT:-}"
+              description: "GitHub PAT for public repos (user/pass)"
+          - string:
+              scope: GLOBAL
+              id: "github-public-pat"
+              secret: "${GH_PAT:-}"
+              description: "GitHub PAT as string credential"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "smtp-gmail"
+              username: "${SMTP_USER:-}"
+              password: "${SMTP_PASS:-}"
+              description: "SMTP app password"
+
+system:
+  location:
+    url: "${JENKINS_URL:-}"
+    adminAddress: "${JENKINS_ADMIN_EMAIL:-}"
+  mailer:
+    smtpHost: "smtp.gmail.com"
+    smtpPort: "587"
+    useSsl: false
+    useTls: true
+    useSMTPAuth: true
+    authentication:
+      username: "${SMTP_USER:-}"
+      password: "${SMTP_PASS:-}"
+    charset: "UTF-8"
+  extendedEmailPublisher:
+    defaultContentType: "text/html"
+    defaultSubject: "$PROJECT_NAME - $BUILD_STATUS"
+    defaultRecipients: "${DEFAULT_RECIPIENTS:-}"
+    smtpHost: "smtp.gmail.com"
+    smtpPort: "587"
+    credentialsId: "smtp-gmail"
+    useSsl: false
+    useTls: true
+    charset: "UTF-8"
+  githubConfiguration:
+    apiRateLimitChecker: ThrottleOnOver
+    endpoints:
+      - name: "github.com"
+        apiUrl: "https://api.github.com"
+        credentialsId: "github-public-pat"
+        manageHooks: true
+
+tool:
+  git:
+    installations:
+      - name: "Git"
+        home: "git"
