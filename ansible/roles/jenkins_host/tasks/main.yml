@@ -96,6 +96,14 @@
     mode: '0644'
   notify: [ "daemon-reload", "restart jenkins" ]
 
+- name: Ensure /etc/jenkins exists for env file
+  ansible.builtin.file:
+    path: /etc/jenkins
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
 - name: Reference plugins list (optional)
   ansible.builtin.copy:
     dest: /var/lib/jenkins/plugins.txt

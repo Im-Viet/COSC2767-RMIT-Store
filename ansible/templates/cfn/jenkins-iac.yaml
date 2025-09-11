@@ -9,6 +9,9 @@ Parameters:
   EverywhereCidr: { Type: String, Default: 0.0.0.0/0 }
   RepoUrl:        { Type: String, Description: "Git repo URL that contains ansible/ (public or accessible)" }
   MongoStackName: { Type: String, Description: "Name of the MongoDB stack to import its outputs" }
+  GhPatParamName: { Type: String, Default: /ci/github/pat }
+  SmtpUserParam:  { Type: String, Default: /ci/smtp/user }
+  SmtpPassParam:  { Type: String, Default: /ci/smtp/pass }
 Resources:
   JenkinsSG:
     Type: AWS::EC2::SecurityGroup
@@ -40,40 +43,54 @@ Resources:
           Fn::Sub:
             - |
                 #!/bin/bash -xe
-                dnf -y install git python3
+                dnf -y install git python3 awscli
                 python3 -m pip install --upgrade pip
-                # boto3/botocore are handy later for SSM-based tasks
                 python3 -m pip install ansible boto3 botocore
 
-                # 1) Pull and configure Jenkins host AS THE jenkins USER into a fixed path
-                su - jenkins -s /bin/bash -c "ansible-pull \
+                # 0) Fetch secrets FIRST and write root-only env file
+                GH_PAT="$(aws ssm get-parameter --with-decryption --name ${GhPatParamName} --query 'Parameter.Value' --output text --region ${AWS::Region})"
+                SMTP_USER="$(aws ssm get-parameter --name ${SmtpUserParam} --query 'Parameter.Value' --output text --region ${AWS::Region})"
+                SMTP_PASS="$(aws ssm get-parameter --with-decryption --name ${SmtpPassParam} --query 'Parameter.Value' --output text --region ${AWS::Region})"
+
+                install -o root -g root -m 0700 -d /etc/jenkins
+                umask 077
+                cat >/etc/jenkins/jenkins.env <<EOF
+                GH_PAT=${GH_PAT}
+                SMTP_USER=${SMTP_USER}
+                SMTP_PASS=${SMTP_PASS}
+                EOF
+                chmod 0600 /etc/jenkins/jenkins.env
+
+                # 1) Pull and configure Jenkins host AS ROOT
+                ansible-pull \
                   -d /var/lib/jenkins/ansible-src \
                   -U ${RepoUrl} ansible/playbooks/configure-jenkins-host.yml \
                   -i localhost, \
                   -e env=${Env} \
                   -e jenkins_url=http://${JenkinsEip.PublicIp}:8080/ \
                   -e mongodb_private_ip=${MongoPrivateIpFromExport} \
-                  -e mongodb_instance_id=${MongoInstanceIdFromExport}"
-                
-                # 2) Prepare Ansible collections and python libs for the jenkins user
+                  -e mongodb_instance_id=${MongoInstanceIdFromExport}
+
+                # Ensure repo is owned by jenkins for later use
+                chown -R jenkins:jenkins /var/lib/jenkins/ansible-src
+
+                # 2) Prepare Ansible collections/libs for the jenkins user
                 sudo -u jenkins -H ansible-galaxy collection install amazon.aws community.docker kubernetes.core
                 sudo -u jenkins -H python3 -m pip install --user boto3 botocore
 
-                # 3) Ensure env vars are available to the shell running the next ansible commands
+                # 3) Export vars for this shell (inventory uses them) and run from the repo we just pulled
                 export MONGODB_PRIVATE_IP="${MongoPrivateIpFromExport}"
                 export MONGODB_INSTANCE_ID="${MongoInstanceIdFromExport}"
-
-                # 4) Run from the repo we just pulled as jenkins
                 cd /var/lib/jenkins/ansible-src
 
-                # Short wait for SSM to be ready on the Mongo instance
+                # Short wait for SSM to be ready
                 for i in {1..10}; do
                   sudo -u jenkins -H ansible -i ansible/inventories/mongo/hosts.yml mongodb \
                     -m raw -a 'test -e /usr/bin/python3 || sudo dnf -y install python3' && break
                   echo "SSM not ready yet, retrying..."; sleep 10
                 done
 
-                # 5) Configure the Mongo host (Docker + container + DB user)
+                # 4) Configure the Mongo host (Docker + container + DB user)
                 sudo -u jenkins -H ansible-playbook -i ansible/inventories/mongo/hosts.yml ansible/playbooks/configure-mongodb-host.yml
             - MongoPrivateIpFromExport:
                 Fn::ImportValue: !Sub '${MongoStackName}-MongoPrivateIp'

@@ -10,3 +10,6 @@ mongodb_private_ip:  "{{ lookup('env','MONGODB_PRIVATE_IP')  | default('', true)
 
 # MongoDB connection string base
 mongo_uri_base: "mongodb://rmitapp:rmitapp123@{{ mongodb_private_ip }}:27017/rmit-store?authSource=rmit-store"
+
+# GitHub PAT SSM parameter name
+gh_pat_param_name: "/ci/github/pat"
