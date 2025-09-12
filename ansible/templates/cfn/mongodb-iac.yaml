@@ -43,5 +43,4 @@ Mappings:
 
 Outputs:
   MongoPrivateIp: { Value: !GetAtt MongoInstance.PrivateIp, Description: "Private IP of MongoDB EC2", Export: { Name: !Sub "${AWS::StackName}-MongoPrivateIp" } }
-  MongoInstanceId: { Value: !Ref MongoInstance, Export: { Name: !Sub "${AWS::StackName}-MongoInstanceId" } }
   MongoSecurityGroupId: { Value: !Ref MongoSg, Description: "Security Group ID of MongoDB EC2" }
