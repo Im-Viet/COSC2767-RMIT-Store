@@ -13,10 +13,12 @@
     name: [python3, python3-pip]
     state: present
 
-- name: Install Docker SDK for Python (for community.docker.* modules)
-  ansible.builtin.pip:
-    name: docker
-    executable: pip3
+- name: Install Docker SDK for Python from distro
+  ansible.builtin.package:
+    name: python3-docker
+    state: present
+  register: docker_sdk_pkg
+  ignore_errors: true
 
 - name: Add ec2-user to docker group
   ansible.builtin.user: { name: ec2-user, groups: docker, append: true }
