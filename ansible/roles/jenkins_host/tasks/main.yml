@@ -141,28 +141,55 @@
     dest: /opt/jenkins-plugin-manager/jenkins-plugin-manager.jar
     mode: '0644'
 
-- name: Create jenkins-plugin-cli wrapper if CLI not present
-  ansible.builtin.copy:
-    dest: /usr/lib/jenkins/jenkins-plugin-cli
+# ensure the plugins dir exists with correct ownership (wrapper will also mkdir -p, but this is cleaner)
+- name: Ensure Jenkins plugins directory exists
+  ansible.builtin.file:
+    path: /var/lib/jenkins/plugins
+    state: directory
+    owner: jenkins
+    group: jenkins
     mode: '0755'
-    force: no 
+
+- name: Create jenkins-plugin-cli wrapper (on PATH)
+  ansible.builtin.copy:
+    dest: /usr/local/bin/jenkins-plugin-cli
+    owner: root
+    group: root
+    mode: '0755'
+    force: no   # don’t overwrite if it already exists
     content: |
       #!/bin/bash
       set -euo pipefail
       JAR="/opt/jenkins-plugin-manager/jenkins-plugin-manager.jar"
       PLUGINS_DIR="/var/lib/jenkins/plugins"
-      WAR="/usr/share/java/jenkins.war"
+      # Detect where the Jenkins WAR is (differs by distro/package)
+      if   [ -f /usr/share/java/jenkins.war ]; then WAR="/usr/share/java/jenkins.war"
+      elif [ -f /usr/lib/jenkins/jenkins.war ]; then WAR="/usr/lib/jenkins/jenkins.war"
+      else WAR=""; fi
+
       mkdir -p "$PLUGINS_DIR"
       chown -R jenkins:jenkins "$PLUGINS_DIR"
-      exec /usr/bin/java -jar "$JAR" --plugin-file /var/lib/jenkins/plugins.txt --plugin-download-directory "$PLUGINS_DIR" --war "$WAR" --latest true
 
-- name: Attempt to install plugins via jenkins-plugin-cli if available
+      if [ -n "$WAR" ]; then
+        exec /usr/bin/java -jar "$JAR" \
+          --plugin-file /var/lib/jenkins/plugins.txt \
+          --plugin-download-directory "$PLUGINS_DIR" \
+          --war "$WAR" \
+          --latest true
+      else
+        exec /usr/bin/java -jar "$JAR" \
+          --plugin-file /var/lib/jenkins/plugins.txt \
+          --plugin-download-directory "$PLUGINS_DIR" \
+          --latest true
+      fi
+
+- name: Install plugins via jenkins-plugin-cli (if wrapper exists)
   ansible.builtin.shell: |
     set -euo pipefail
-    CLI=/usr/lib/jenkins/jenkins-plugin-cli
+    CLI=/usr/local/bin/jenkins-plugin-cli
     if [ -x "$CLI" ]; then
       chown jenkins:jenkins /var/lib/jenkins/plugins.txt
-      $CLI
+      "$CLI"
     else
       echo "jenkins-plugin-cli not found; install plugins via UI or package alternative."
     fi
@@ -171,6 +198,7 @@
   changed_when: "'Installed' in plugin_cli.stdout or 'installed' in plugin_cli.stdout or plugin_cli.rc == 0"
   failed_when: false
   notify: [ "restart jenkins" ]
+
 
 # JCasC deployment
 - name: Ensure JCasC config directory
