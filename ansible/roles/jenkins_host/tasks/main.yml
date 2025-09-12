@@ -20,27 +20,6 @@
     name: [git, java-17-amazon-corretto, docker]
     state: present
 
-# --- Install AWS SSM Session Manager Plugin (client) ---
-- name: Download session-manager-plugin RPM
-  ansible.builtin.get_url:
-    url: https://s3.amazonaws.com/session-manager-downloads/plugin/latest/linux_64bit/session-manager-plugin.rpm
-    dest: /tmp/session-manager-plugin.rpm
-    mode: '0644'
-
-# Install without GPG signature verification (AWS S3 RPM isn’t in a signed repo)
-- name: Install session-manager-plugin RPM (no signature check)
-  ansible.builtin.command:
-    cmd: rpm -Uvh --replacepkgs --nosignature /tmp/session-manager-plugin.rpm
-  args:
-    creates: /usr/local/sessionmanagerplugin/bin/session-manager-plugin
-
-# Make sure it’s on PATH for ansible’s aws_ssm connection
-- name: Symlink session-manager-plugin into /usr/local/bin
-  ansible.builtin.file:
-    src: /usr/local/sessionmanagerplugin/bin/session-manager-plugin
-    dest: /usr/local/bin/session-manager-plugin
-    state: link
-
 - name: Enable and start Docker
   ansible.builtin.service: { name: docker, enabled: true, state: started }
 
