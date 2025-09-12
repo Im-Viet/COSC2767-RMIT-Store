@@ -128,7 +128,6 @@
     group: jenkins
     mode: '0644'
 
-# Ensure jenkins-plugin-cli is available (fallback to plugin-installation-manager tool)
 - name: Create plugin manager directory
   ansible.builtin.file:
     path: /opt/jenkins-plugin-manager
@@ -141,7 +140,6 @@
     dest: /opt/jenkins-plugin-manager/jenkins-plugin-manager.jar
     mode: '0644'
 
-# ensure the plugins dir exists with correct ownership (wrapper will also mkdir -p, but this is cleaner)
 - name: Ensure Jenkins plugins directory exists
   ansible.builtin.file:
     path: /var/lib/jenkins/plugins
@@ -150,55 +148,47 @@
     group: jenkins
     mode: '0755'
 
-- name: Create jenkins-plugin-cli wrapper (on PATH)
-  ansible.builtin.copy:
-    dest: /usr/local/bin/jenkins-plugin-cli
-    owner: root
-    group: root
-    mode: '0755'
-    force: no   # don’t overwrite if it already exists
-    content: |
-      #!/bin/bash
-      set -euo pipefail
-      JAR="/opt/jenkins-plugin-manager/jenkins-plugin-manager.jar"
-      PLUGINS_DIR="/var/lib/jenkins/plugins"
-      # Detect where the Jenkins WAR is (differs by distro/package)
-      if   [ -f /usr/share/java/jenkins.war ]; then WAR="/usr/share/java/jenkins.war"
-      elif [ -f /usr/lib/jenkins/jenkins.war ]; then WAR="/usr/lib/jenkins/jenkins.war"
-      else WAR=""; fi
+# IMPORTANT: call the JAR directly (no wrapper), pin WAR path explicitly.
+# Install only JCasC first (idempotent via creates:). If this fails, we want the task to fail.
+- name: Ensure JCasC plugin is installed
+  become: true
+  become_user: jenkins
+  ansible.builtin.command: >
+    /usr/bin/java -jar /opt/jenkins-plugin-manager/jenkins-plugin-manager.jar
+    --war /usr/lib/jenkins/jenkins.war
+    --plugin-download-directory /var/lib/jenkins/plugins
+    --plugins configuration-as-code
+  args:
+    creates: /var/lib/jenkins/plugins/configuration-as-code.jpi
+  register: pim_jcasc
+  retries: 3
+  delay: 10
+  until: pim_jcasc.rc == 0
+  notify: ["restart jenkins"]
 
-      mkdir -p "$PLUGINS_DIR"
-      chown -R jenkins:jenkins "$PLUGINS_DIR"
+# Optional: install the rest from plugins.txt (fine if no-op). Let failures fail.
+- name: Install remaining plugins from plugins.txt
+  become: true
+  become_user: jenkins
+  ansible.builtin.command: >
+    /usr/bin/java -jar /opt/jenkins-plugin-manager/jenkins-plugin-manager.jar
+    --war /usr/lib/jenkins/jenkins.war
+    --plugin-file /var/lib/jenkins/plugins.txt
+    --plugin-download-directory /var/lib/jenkins/plugins
+  register: pim_bulk
+  changed_when: "'Installed' in pim_bulk.stdout or 'installed' in pim_bulk.stdout"
+  retries: 3
+  delay: 10
+  until: pim_bulk.rc == 0
 
-      if [ -n "$WAR" ]; then
-        exec /usr/bin/java -jar "$JAR" \
-          --plugin-file /var/lib/jenkins/plugins.txt \
-          --plugin-download-directory "$PLUGINS_DIR" \
-          --war "$WAR" \
-          --latest true
-      else
-        exec /usr/bin/java -jar "$JAR" \
-          --plugin-file /var/lib/jenkins/plugins.txt \
-          --plugin-download-directory "$PLUGINS_DIR" \
-          --latest true
-      fi
-
-- name: Install plugins via jenkins-plugin-cli (if wrapper exists)
-  ansible.builtin.shell: |
-    set -euo pipefail
-    CLI=/usr/local/bin/jenkins-plugin-cli
-    if [ -x "$CLI" ]; then
-      chown jenkins:jenkins /var/lib/jenkins/plugins.txt
-      "$CLI"
-    else
-      echo "jenkins-plugin-cli not found; install plugins via UI or package alternative."
-    fi
-  args: { executable: /bin/bash }
-  register: plugin_cli
-  changed_when: "'Installed' in plugin_cli.stdout or 'installed' in plugin_cli.stdout or plugin_cli.rc == 0"
-  failed_when: false
-  notify: [ "restart jenkins" ]
-
+# Make sure jenkins user owns plugins (avoids load warnings)
+- name: Ensure plugin files owned by jenkins
+  ansible.builtin.file:
+    path: /var/lib/jenkins/plugins
+    owner: jenkins
+    group: jenkins
+    recurse: true
+    state: directory
 
 # JCasC deployment
 - name: Ensure JCasC config directory
