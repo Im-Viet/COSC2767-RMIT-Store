@@ -148,14 +148,61 @@
     group: jenkins
     mode: '0755'
 
-# IMPORTANT: call the JAR directly (no wrapper), pin WAR path explicitly.
-# Install only JCasC first (idempotent via creates:). If this fails, we want the task to fail.
-- name: Ensure JCasC plugin is installed
+# --- Plugins (deterministic + JCasC first) -----------------------------------
+- name: Reference plugins list (curated, valid IDs only)
+  ansible.builtin.copy:
+    dest: /var/lib/jenkins/plugins.txt
+    content: |
+      ansicolor
+      configuration-as-code
+      workflow-aggregator
+      docker-workflow
+      git
+      github
+      github-branch-source
+      credentials-binding
+      junit
+      timestamper
+      email-ext
+      mailer
+      build-timeout
+      ansible
+    owner: jenkins
+    group: jenkins
+    mode: '0644'
+
+- name: Create plugin manager directory
+  ansible.builtin.file:
+    path: /opt/jenkins-plugin-manager
+    state: directory
+    mode: '0755'
+
+- name: Download plugin-installation-manager tool jar
+  ansible.builtin.get_url:
+    url: https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.12.15/jenkins-plugin-manager-2.12.15.jar
+    dest: /opt/jenkins-plugin-manager/jenkins-plugin-manager.jar
+    mode: '0644'
+
+- name: Ensure Jenkins plugins directory exists
+  ansible.builtin.file:
+    path: /var/lib/jenkins/plugins
+    state: directory
+    owner: jenkins
+    group: jenkins
+    mode: '0755'
+
+# Read the Jenkins version from the installed WAR so PIM resolves compatible deps
+- name: Get Jenkins version from WAR
+  ansible.builtin.command: /usr/bin/java -jar /usr/lib/jenkins/jenkins.war --version
+  register: jenkins_version
+  changed_when: false
+
+- name: Ensure JCasC plugin is installed first
   become: true
   become_user: jenkins
   ansible.builtin.command: >
     /usr/bin/java -jar /opt/jenkins-plugin-manager/jenkins-plugin-manager.jar
-    --war /usr/lib/jenkins/jenkins.war
+    --jenkins-version {{ jenkins_version.stdout | trim }}
     --plugin-download-directory /var/lib/jenkins/plugins
     --plugins configuration-as-code
   args:
@@ -166,22 +213,19 @@
   until: pim_jcasc.rc == 0
   notify: ["restart jenkins"]
 
-# Optional: install the rest from plugins.txt (fine if no-op). Let failures fail.
 - name: Install remaining plugins from plugins.txt
   become: true
   become_user: jenkins
   ansible.builtin.command: >
     /usr/bin/java -jar /opt/jenkins-plugin-manager/jenkins-plugin-manager.jar
-    --war /usr/lib/jenkins/jenkins.war
+    --jenkins-version {{ jenkins_version.stdout | trim }}
     --plugin-file /var/lib/jenkins/plugins.txt
     --plugin-download-directory /var/lib/jenkins/plugins
   register: pim_bulk
-  changed_when: "'Installed' in pim_bulk.stdout or 'installed' in pim_bulk.stdout"
   retries: 3
   delay: 10
   until: pim_bulk.rc == 0
 
-# Make sure jenkins user owns plugins (avoids load warnings)
 - name: Ensure plugin files owned by jenkins
   ansible.builtin.file:
     path: /var/lib/jenkins/plugins
