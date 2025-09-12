@@ -70,13 +70,10 @@ unclassified:
     useSsl: false
     useTls: true
     charset: "UTF-8"
-  githubConfiguration:
-    apiRateLimitChecker: ThrottleOnOver
+  githubBranchSource:
     endpoints:
       - name: "github.com"
         apiUrl: "https://api.github.com"
-        credentialsId: "github-public-pat"
-        manageHooks: true
 
 tool:
   git:
