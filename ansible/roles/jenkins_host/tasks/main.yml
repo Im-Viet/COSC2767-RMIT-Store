@@ -148,8 +148,10 @@
     group: jenkins
     mode: '0755'
 
-# --- Plugins (deterministic + JCasC first) -----------------------------------
-- name: Reference plugins list (curated, valid IDs only)
+# --- Plugins & JCasC (clean path-agnostic, version-aware) ---------------------
+
+# Single source of truth for plugins (valid IDs only)
+- name: Write plugins.txt (curated)
   ansible.builtin.copy:
     dest: /var/lib/jenkins/plugins.txt
     content: |
@@ -191,13 +193,14 @@
     group: jenkins
     mode: '0755'
 
-# Read the Jenkins version from the installed WAR so PIM resolves compatible deps
-- name: Get Jenkins version from WAR
-  ansible.builtin.command: /usr/bin/java -jar /usr/lib/jenkins/jenkins.war --version
+# ✅ Get the installed Jenkins version without relying on war file paths
+- name: Get Jenkins version from RPM
+  ansible.builtin.command: rpm -q --qf '%{VERSION}\n' jenkins
   register: jenkins_version
   changed_when: false
 
-- name: Ensure JCasC plugin is installed first
+# Install JCasC first so the next restart can load YAML
+- name: Install JCasC plugin first
   become: true
   become_user: jenkins
   ansible.builtin.command: >
@@ -213,6 +216,7 @@
   until: pim_jcasc.rc == 0
   notify: ["restart jenkins"]
 
+# Install the rest of the plugins
 - name: Install remaining plugins from plugins.txt
   become: true
   become_user: jenkins
@@ -233,6 +237,24 @@
     group: jenkins
     recurse: true
     state: directory
+
+# --- JCasC file placement (keep as-is if you already have it) ----------------
+- name: Ensure JCasC config directory
+  ansible.builtin.file:
+    path: /var/lib/jenkins/casc_configs
+    state: directory
+    owner: jenkins
+    group: jenkins
+    mode: '0755'
+
+- name: Deploy JCasC file
+  ansible.builtin.copy:
+    src: casc_configs/jenkins.yaml
+    dest: /var/lib/jenkins/casc_configs/jenkins.yaml
+    owner: jenkins
+    group: jenkins
+    mode: '0644'
+  notify: ["restart jenkins"]
 
 # JCasC deployment
 - name: Ensure JCasC config directory
