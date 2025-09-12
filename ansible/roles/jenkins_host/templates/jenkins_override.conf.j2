@@ -14,3 +14,4 @@ Environment="DEFAULT_RECIPIENTS=antthames92@gmail.com"
 Environment="MONGODB_PRIVATE_IP={{ mongodb_private_ip | default('') }}"
 Environment="MONGODB_INSTANCE_ID={{ mongodb_instance_id | default('') }}"
 EnvironmentFile=-/etc/jenkins/jenkins.env
+Environment="JENKINS_JAVA_OPTIONS=-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"
