@@ -2,6 +2,10 @@
 - name: Set hostname
   ansible.builtin.hostname: { name: jenkins }
 
+- name: Set OS timezone (no plugin required)
+  ansible.builtin.command: timedatectl set-timezone "{{ jenkins_timezone }}"
+  changed_when: false
+
 - name: Ensure /etc/fstab has tmpfs for /tmp
   ansible.builtin.lineinfile:
     path: /etc/fstab
@@ -123,7 +127,6 @@
       build-timeout
       github-branch-source
       docker-pipeline
-      global-time-zone
     owner: jenkins
     group: jenkins
     mode: '0644'

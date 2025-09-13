@@ -13,3 +13,6 @@ mongo_uri_base: "mongodb://rmitapp:rmitapp123@{{ mongodb_private_ip }}:27017/rmi
 
 # GitHub PAT SSM parameter name
 gh_pat_param_name: "/ci/github/pat"
+
+# Jenkins timezone
+jenkins_timezone: "Asia/Ho_Chi_Minh"
