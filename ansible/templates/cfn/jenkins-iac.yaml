@@ -60,6 +60,7 @@ Resources:
                 GH_PAT=$GH_PAT
                 SMTP_USER=$SMTP_USER
                 SMTP_PASS=$SMTP_PASS
+                MONGODB_PRIVATE_IP=${MongoPrivateIpFromExport}
                 EOF
                 chmod 0600 /etc/jenkins/jenkins.env
 

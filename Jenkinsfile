@@ -289,8 +289,6 @@ pipeline {
         sh '''
           set -euo pipefail
           kubectl apply -f k8s/prod/00-namespace.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/10-configmap.yaml
-          kubectl -n "$PROD_NS" apply -f k8s/prod/11-secret.yaml
 
           # Set images for deployments
           sed "s|__IMAGE__|$BACKEND_IMAGE|g" k8s/prod/20-backend-deploy.yaml | kubectl -n "$PROD_NS" apply -f -
