@@ -308,6 +308,15 @@ pipeline {
       }
     }
 
+    stage('Apply Prod Ingress (base)') {
+      steps {
+        sh '''
+          set -euo pipefail
+          sed "s|prod-host|$PROD_HOST|g" k8s/prod/40-ingress.yaml | kubectl -n "$PROD_NS" apply -f -
+        '''
+      }
+    }
+
     stage('Deploy New Version') {
       when { expression { return env.IS_FIRST_DEPLOYMENT != 'true' } }
       steps {
