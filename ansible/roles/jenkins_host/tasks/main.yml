@@ -3,7 +3,7 @@
   ansible.builtin.hostname: { name: jenkins }
 
 - name: Set OS timezone (no plugin required)
-  ansible.builtin.command: timedatectl set-timezone {{ (jenkins_timezone | default('Asia/Ho_Chi_Minh')) }}
+  ansible.builtin.command: timedatectl set-timezone "Asia/Ho_Chi_Minh"
   changed_when: false
 
 - name: Ensure /etc/fstab has tmpfs for /tmp
