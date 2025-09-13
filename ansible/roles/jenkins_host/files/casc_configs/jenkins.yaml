@@ -58,12 +58,6 @@ unclassified:
       password: "${SMTP_PASS}"
     charset: "UTF-8"
   email-ext:
-    smtpHost: "smtp.gmail.com"
-    smtpPort: "587"
-    useSsl: false
-    useTls: true
-    credentialsId: "smtp-gmail"
-    charset: "UTF-8"
     defaultContentType: "text/html"
     defaultSubject: "$PROJECT_NAME - $BUILD_STATUS"
     defaultRecipients: "${DEFAULT_RECIPIENTS}"
