@@ -132,7 +132,7 @@ pipeline {
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
           # Reuse Jenkins AWS + EKS env variables
-          ansible-playbook -i ansible/inventories/dev/hosts.ini ansible/playbooks/configure-cluster.yml -e env=dev
+          ansible-playbook -i ansible/inventories/dev/hosts.ini ansible/playbooks/configure-cluster.yml -e @ansible/group_vars/all.yml -e env=dev
         '''
       }
     }
@@ -243,7 +243,7 @@ pipeline {
         sh '''
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
-          ansible-playbook -i ansible/inventories/prod/hosts.ini ansible/playbooks/configure-cluster.yml -e env=prod
+          ansible-playbook -i ansible/inventories/prod/hosts.ini ansible/playbooks/configure-cluster.yml -e @ansible/group_vars/all.yml -e env=prod
         '''
       }
     }
