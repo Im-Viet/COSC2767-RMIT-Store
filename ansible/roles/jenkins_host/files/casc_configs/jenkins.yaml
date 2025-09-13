@@ -59,7 +59,6 @@ unclassified:
     charset: "UTF-8"
   email-ext:
     overrideGlobalSettings: false
-    smtpServer: "smtp.gmail.com"
     credentialsId: "smtp-gmail"
     defaultContentType: "text/html"
     defaultSubject: "$PROJECT_NAME - $BUILD_STATUS"
