@@ -7,7 +7,7 @@
   failed_when: cli_check.rc != 0
   loop:
     - { cmd: "aws --version" }
-    - { cmd: "kubectl version --client --short" }
+    - { cmd: "kubectl version --client" }
     - { cmd: "helm version --short" }
 
 # Ensure kubeconfig is set for the EKS cluster (expects Jenkins has AWS CLI perms)
