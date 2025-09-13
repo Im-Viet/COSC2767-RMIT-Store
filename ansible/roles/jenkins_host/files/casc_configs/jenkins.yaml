@@ -45,8 +45,6 @@ credentials:
               description: "SMTP app password"
 
 unclassified:
-  globalTimeZone:
-    timeZone: "Asia/Ho_Chi_Minh"
   location:
     url: "${JENKINS_URL}"
     adminAddress: "${JENKINS_ADMIN_EMAIL}"
@@ -63,7 +61,7 @@ unclassified:
     defaultContentType: "text/html"
     defaultSubject: "$PROJECT_NAME - $BUILD_STATUS"
     defaultRecipients: "${DEFAULT_RECIPIENTS}"
-  githubBranchSource:
+  gitHubConfiguration:
     endpoints:
       - name: "github.com"
         apiUri: "https://api.github.com"
