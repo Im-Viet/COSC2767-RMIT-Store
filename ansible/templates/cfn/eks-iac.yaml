@@ -6,12 +6,20 @@ Parameters:
   SubnetIds:           { Type: List<AWS::EC2::Subnet::Id>, Description: "At least two subnets in default VPC" }
   ClusterRoleName:     { Type: String, Default: LabRole, Description: "Use LabRole (IAM pre-provided by lab)" }
   NodeRoleName:        { Type: String, Default: LabRole, Description: "Use LabRole (IAM pre-provided by lab)" }
-  AccessPrincipalName: { Type: String, Default: LabRole, Description: "Use LabRole (IAM pre-provided by lab)" }
+  LabRoleAccessName:   { Type: String, Default: LabRole, Description: "Use LabRole (IAM pre-provided by lab)" }
+  VoclabsAccessName:  { Type: String, Default: voclabs, Description: "Use VoclabsAccessRole (IAM pre-provided by lab)" }
   NodeGroupName:       { Type: String, Default: ng }
   InstanceType:        { Type: String, Default: t3.medium }
   DesiredSize:         { Type: Number, Default: 2 }
   MinSize:             { Type: Number, Default: 2 }
   MaxSize:             { Type: Number, Default: 2 }
+  KubeProxyVersion:        { Type: String, Default: "v1.33.0-eksbuild.2" }
+  VpcCniVersion:           { Type: String, Default: "v1.19.5-eksbuild.1" }
+  CoreDnsVersion:          { Type: String, Default: "v1.12.1-eksbuild.2" }
+  PodIdentityAgentVersion: { Type: String, Default: "v1.3.8-eksbuild.2" }
+  NodeMonitoringVersion:   { Type: String, Default: "v1.4.0-eksbuild.2" }
+  ExternalDnsVersion:      { Type: String, Default: "v0.19.0-eksbuild.1" }
+  MetricsServerVersion:    { Type: String, Default: "v0.8.0-eksbuild.2" }
 
 Resources:
   EKSCluster:
@@ -26,12 +34,76 @@ Resources:
       AccessConfig:
         AuthenticationMode: API_AND_CONFIG_MAP
         BootstrapClusterCreatorAdminPermissions: false
+  
+    # --- AWS-managed add-ons ---
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: kube-proxy
+      AddonVersion: !Ref KubeProxyVersion
+      ResolveConflicts: OVERWRITE
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: vpc-cni
+      AddonVersion: !Ref VpcCniVersion
+      ResolveConflicts: OVERWRITE
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: coredns
+      AddonVersion: !Ref CoreDnsVersion
+      ResolveConflicts: OVERWRITE
+  PodIdentityAgentAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: eks-pod-identity-agent
+      AddonVersion: !Ref PodIdentityAgentVersion
+      ResolveConflicts: OVERWRITE
+  NodeMonitoringAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: eks-node-monitoring-agent
+      AddonVersion: !Ref NodeMonitoringVersion
+      ResolveConflicts: OVERWRITE
+
+  # --- Community add-ons ---
+  ExternalDnsAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: external-dns
+      AddonVersion: !Ref ExternalDnsVersion
+      ResolveConflicts: OVERWRITE
+
+  MetricsServerAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: metrics-server
+      AddonVersion: !Ref MetricsServerVersion
+      ResolveConflicts: OVERWRITE
+
+  ClusterAccessForVocLabs:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName: !Ref EKSCluster
+      PrincipalArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${VoclabsAccessName}"
+      Type: STANDARD
+      AccessPolicies:
+        - PolicyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          AccessScope: { Type: cluster }
 
   ClusterAccessForLabRole:
     Type: AWS::EKS::AccessEntry
     Properties:
       ClusterName: !Ref EKSCluster
-      PrincipalArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${AccessPrincipalName}"
+      PrincipalArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${LabRoleAccessName}"
       Type: STANDARD
       AccessPolicies:
         - PolicyArn: "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy"
