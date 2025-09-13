@@ -63,12 +63,6 @@ unclassified:
     defaultContentType: "text/html"
     defaultSubject: "$PROJECT_NAME - $BUILD_STATUS"
     defaultRecipients: "${DEFAULT_RECIPIENTS}"
-    smtpHost: "smtp.gmail.com"
-    smtpPort: "587"
-    credentialsId: "smtp-gmail"
-    useSsl: false
-    useTls: true
-    charset: "UTF-8"
   githubBranchSource:
     endpoints:
       - name: "github.com"
