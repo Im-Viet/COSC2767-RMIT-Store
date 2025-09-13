@@ -3,9 +3,11 @@
 - hosts: localhost
   connection: local
   gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../group_vars/all.yml"
+    - "{{ playbook_dir }}/../group_vars/{{ env | default('dev') }}.yml"
   vars:
     env: "{{ env | default('dev') }}"
-    namespace: "{{ dev_namespace if env == 'dev' else prod_namespace }}"
   tasks:
     - name: Prepare CLIs and kubeconfig
       import_role:
