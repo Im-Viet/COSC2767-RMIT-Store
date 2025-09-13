@@ -57,14 +57,22 @@ unclassified:
       username: "${SMTP_USER}"
       password: "${SMTP_PASS}"
     charset: "UTF-8"
-  extendedEmailPublisher:
+  email-ext:
+    smtpHost: "smtp.gmail.com"
+    smtpPort: "587"
+    useSsl: false
+    useTls: true
+    credentialsId: "smtp-gmail"
+    charset: "UTF-8"
     defaultContentType: "text/html"
     defaultSubject: "$PROJECT_NAME - $BUILD_STATUS"
     defaultRecipients: "${DEFAULT_RECIPIENTS}"
-  gitHubConfiguration:
-    endpoints:
-      - name: "github.com"
-        apiUri: "https://api.github.com"
+  gitHubPluginConfig:
+    configs:
+      - name: "GitHub.com"
+        apiUrl: "https://api.github.com"
+        credentialsId: "github-public-pat"
+        manageHooks: true
 
 tool:
   git:
