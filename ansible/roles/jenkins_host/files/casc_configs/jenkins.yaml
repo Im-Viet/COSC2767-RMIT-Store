@@ -58,11 +58,15 @@ unclassified:
       password: "${SMTP_PASS}"
     charset: "UTF-8"
   email-ext:
-    overrideGlobalSettings: false
-    credentialsId: "smtp-gmail"
     defaultContentType: "text/html"
     defaultSubject: "$PROJECT_NAME - $BUILD_STATUS"
     defaultRecipients: "${DEFAULT_RECIPIENTS}"
+    mailAccount:
+      smtpHost: "smtp.gmail.com"
+      smtpPort: "587"
+      useSsl: false
+      useTls: true
+      credentialsId: "smtp-credentials"
   gitHubPluginConfig:
     configs:
       - name: "GitHub.com"
