@@ -55,7 +55,6 @@ unclassified:
     smtpPort: "587"
     useSsl: false
     useTls: true
-    useSMTPAuth: true
     authentication:
       username: "${SMTP_USER}"
       password: "${SMTP_PASS}"
@@ -73,7 +72,7 @@ unclassified:
   githubBranchSource:
     endpoints:
       - name: "github.com"
-        apiUrl: "https://api.github.com"
+        apiUri: "https://api.github.com"
 
 tool:
   git:
