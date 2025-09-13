@@ -78,6 +78,13 @@
     curl -sSfL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
   args: { executable: /bin/bash }
 
+- name: Ensure helm binary is executable for all users
+  ansible.builtin.file:
+    path: /usr/local/bin/helm
+    owner: root
+    group: root
+    mode: '0755'
+
 - name: Setup NodeSource repo
   ansible.builtin.shell: |
     set -euo pipefail
