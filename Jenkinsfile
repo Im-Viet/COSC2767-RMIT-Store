@@ -130,8 +130,9 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user "kubernetes>=26,<32" "jsonpatch>=1.33" "PyYAML>=5.4"
           export PATH="$HOME/.local/bin:$PATH"
-          # Reuse Jenkins AWS + EKS env variables
           ansible-playbook -i ansible/inventories/dev/hosts.ini ansible/playbooks/configure-cluster.yml -e @ansible/group_vars/all.yml -e env=dev
         '''
       }
@@ -242,6 +243,8 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user "kubernetes>=26,<32" "jsonpatch>=1.33" "PyYAML>=5.4"
           export PATH="$HOME/.local/bin:$PATH"
           ansible-playbook -i ansible/inventories/prod/hosts.ini ansible/playbooks/configure-cluster.yml -e @ansible/group_vars/all.yml -e env=prod
         '''
