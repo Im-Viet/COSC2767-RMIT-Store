@@ -564,6 +564,7 @@ YAML
           
           <p><a href="${env.BUILD_URL}">View build details</a></p>
         """
+        debug: true
       )
     }
   }
