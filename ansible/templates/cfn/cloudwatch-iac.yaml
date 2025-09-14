@@ -1,0 +1,282 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "CloudWatch alarms for Classic Load Balancer (CLB) + EC2 instances with SNS email notifications. Creates CLB alarms (Latency, Backend 5XX, UnHealthyHostCount) and EC2 alarms (CPUUtilization, StatusCheckFailed) for up to 3 instances."
+Parameters:
+  # --- CLB ---
+  LoadBalancerName:        { Type: String, Description: Name of the Classic Load Balancer (EC2 → Load Balancers → Type=Classic). }
+  # --- SNS ---
+  AlarmEmail:              { Type: String, Description: Email address to receive alarm notifications (confirm the subscription). }
+  TopicName:               { Type: String, Default: rmit-store-alerts, Description: SNS topic name for notifications. }
+  # --- CLB thresholds/periods ---
+  LatencyThresholdSeconds: { Type: Number, Default: 1, Description: Average CLB Latency (seconds) threshold for alarm. }
+  FiveXXThreshold:         { Type: Number, Default: 5, Description: Sum of CLB Backend 5XX errors per period to alarm on. }
+  UnhealthyHostThreshold:  { Type: Number, Default: 0, Description: Average CLB UnHealthyHostCount to alarm on (0 => any unhealthy host). }
+  PeriodSeconds:           { Type: Number, Default: 60, Description: "CloudWatch period in seconds (typical: 60 or 300)." }
+  EvalPeriodsLatency:      { Type: Number, Default: 3, Description: Number of evaluation periods for the CLB Latency alarm. }
+  EvalPeriods5xx:          { Type: Number, Default: 3, Description: Number of evaluation periods for the CLB 5XX alarm. }
+  EvalPeriodsUnhealthy:    { Type: Number, Default: 1, Description: Number of evaluation periods for the CLB UnHealthyHostCount alarm. }
+  # --- EC2 instance selection ---
+  InstanceId1:             { Type: AWS::EC2::Instance::Id, Description: "Primary EC2 instance ID (e.g., Jenkins box)." }
+  InstanceId2:             { Type: String, Default: "", Description: "Optional EC2 instance ID #2 (leave blank to skip)." }
+  InstanceId3:             { Type: String, Default: "", Description: "Optional EC2 instance ID #3 (leave blank to skip)." }
+  # --- EC2 thresholds/periods ---
+  CpuThresholdPercent:     { Type: Number, Default: 80, Description: "EC2 CPUUtilization average percentage threshold." }
+  CpuPeriodSeconds:        { Type: Number, Default: 300, Description: "EC2 CPUUtilization period in seconds (60 if Detailed Monitoring enabled, 300 otherwise)." }
+  CpuEvalPeriods:          { Type: Number, Default: 1, Description: Evaluation periods for EC2 CPU alarm. }
+  StatusPeriodSeconds:     { Type: Number, Default: 60, Description: EC2 StatusCheckFailed period in seconds. }
+  StatusEvalPeriods:       { Type: Number, Default: 1, Description: Evaluation periods for EC2 StatusCheckFailed alarm. }
+Conditions:
+  HasInstance2: !Not [ !Equals [ !Ref InstanceId2, "" ] ]
+  HasInstance3: !Not [ !Equals [ !Ref InstanceId3, "" ] ]
+
+Resources:
+  # --- SNS for notifications ---
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref TopicName
+      DisplayName: !Sub "Alerts: ${LoadBalancerName}"
+
+  AlertsSubscriptionEmail:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertsTopic
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+
+  # --- CLB Alarms ---
+  ClbLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${LoadBalancerName}-Latency-gt${LatencyThresholdSeconds}s"
+      AlarmDescription: !Sub "CLB Latency Average > ${LatencyThresholdSeconds}s for ${EvalPeriodsLatency}x${PeriodSeconds}s."
+      Namespace: "AWS/ELB"
+      MetricName: "Latency"
+      Dimensions:
+        - Name: LoadBalancerName
+          Value: !Ref LoadBalancerName
+      Statistic: "Average"
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: !Ref EvalPeriodsLatency
+      DatapointsToAlarm: !Ref EvalPeriodsLatency
+      Threshold: !Ref LatencyThresholdSeconds
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      Unit: "Seconds"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  ClbBackend5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${LoadBalancerName}-Backend5XX-gt${FiveXXThreshold}"
+      AlarmDescription: !Sub "CLB HTTPCode_Backend_5XX Sum > ${FiveXXThreshold} for ${EvalPeriods5xx}x${PeriodSeconds}s."
+      Namespace: "AWS/ELB"
+      MetricName: "HTTPCode_Backend_5XX"
+      Dimensions:
+        - Name: LoadBalancerName
+          Value: !Ref LoadBalancerName
+      Statistic: "Sum"
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: !Ref EvalPeriods5xx
+      DatapointsToAlarm: !Ref EvalPeriods5xx
+      Threshold: !Ref FiveXXThreshold
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  ClbUnhealthyHostAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${LoadBalancerName}-UnHealthyHostCount-gt${UnhealthyHostThreshold}"
+      AlarmDescription: !Sub "CLB UnHealthyHostCount Average > ${UnhealthyHostThreshold} for ${EvalPeriodsUnhealthy}x${PeriodSeconds}s."
+      Namespace: "AWS/ELB"
+      MetricName: "UnHealthyHostCount"
+      Dimensions:
+        - Name: LoadBalancerName
+          Value: !Ref LoadBalancerName
+      Statistic: "Average"
+      Period: !Ref PeriodSeconds
+      EvaluationPeriods: !Ref EvalPeriodsUnhealthy
+      DatapointsToAlarm: !Ref EvalPeriodsUnhealthy
+      Threshold: !Ref UnhealthyHostThreshold
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  # --- EC2 helper macro (resource blocks per instance) ---
+  # Instance #1 (required)
+  EC2CPUAlarm1:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "EC2-${InstanceId1}-CPUUtilization-gt${CpuThresholdPercent}"
+      AlarmDescription: !Sub "EC2 CPUUtilization Average > ${CpuThresholdPercent}% for ${CpuEvalPeriods}x${CpuPeriodSeconds}s."
+      Namespace: "AWS/EC2"
+      MetricName: "CPUUtilization"
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId1
+      Statistic: "Average"
+      Period: !Ref CpuPeriodSeconds
+      EvaluationPeriods: !Ref CpuEvalPeriods
+      DatapointsToAlarm: !Ref CpuEvalPeriods
+      Threshold: !Ref CpuThresholdPercent
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      Unit: "Percent"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  EC2StatusAlarm1:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "EC2-${InstanceId1}-StatusCheckFailed"
+      AlarmDescription: !Sub "EC2 StatusCheckFailed > 0 for ${StatusEvalPeriods}x${StatusPeriodSeconds}s."
+      Namespace: "AWS/EC2"
+      MetricName: "StatusCheckFailed"
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId1
+      Statistic: "Maximum"
+      Period: !Ref StatusPeriodSeconds
+      EvaluationPeriods: !Ref StatusEvalPeriods
+      DatapointsToAlarm: !Ref StatusEvalPeriods
+      Threshold: 0
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  # Instance #2 (optional)
+  EC2CPUAlarm2:
+    Condition: HasInstance2
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "EC2-${InstanceId2}-CPUUtilization-gt${CpuThresholdPercent}"
+      AlarmDescription: !Sub "EC2 CPUUtilization Average > ${CpuThresholdPercent}% for ${CpuEvalPeriods}x${CpuPeriodSeconds}s."
+      Namespace: "AWS/EC2"
+      MetricName: "CPUUtilization"
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId2
+      Statistic: "Average"
+      Period: !Ref CpuPeriodSeconds
+      EvaluationPeriods: !Ref CpuEvalPeriods
+      DatapointsToAlarm: !Ref CpuEvalPeriods
+      Threshold: !Ref CpuThresholdPercent
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      Unit: "Percent"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  EC2StatusAlarm2:
+    Condition: HasInstance2
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "EC2-${InstanceId2}-StatusCheckFailed"
+      AlarmDescription: !Sub "EC2 StatusCheckFailed > 0 for ${StatusEvalPeriods}x${StatusPeriodSeconds}s."
+      Namespace: "AWS/EC2"
+      MetricName: "StatusCheckFailed"
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId2
+      Statistic: "Maximum"
+      Period: !Ref StatusPeriodSeconds
+      EvaluationPeriods: !Ref StatusEvalPeriods
+      DatapointsToAlarm: !Ref StatusEvalPeriods
+      Threshold: 0
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  # Instance #3 (optional)
+  EC2CPUAlarm3:
+    Condition: HasInstance3
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "EC2-${InstanceId3}-CPUUtilization-gt${CpuThresholdPercent}"
+      AlarmDescription: !Sub "EC2 CPUUtilization Average > ${CpuThresholdPercent}% for ${CpuEvalPeriods}x${CpuPeriodSeconds}s."
+      Namespace: "AWS/EC2"
+      MetricName: "CPUUtilization"
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId3
+      Statistic: "Average"
+      Period: !Ref CpuPeriodSeconds
+      EvaluationPeriods: !Ref CpuEvalPeriods
+      DatapointsToAlarm: !Ref CpuEvalPeriods
+      Threshold: !Ref CpuThresholdPercent
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      Unit: "Percent"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+  EC2StatusAlarm3:
+    Condition: HasInstance3
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "EC2-${InstanceId3}-StatusCheckFailed"
+      AlarmDescription: !Sub "EC2 StatusCheckFailed > 0 for ${StatusEvalPeriods}x${StatusPeriodSeconds}s."
+      Namespace: "AWS/EC2"
+      MetricName: "StatusCheckFailed"
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId3
+      Statistic: "Maximum"
+      Period: !Ref StatusPeriodSeconds
+      EvaluationPeriods: !Ref StatusEvalPeriods
+      DatapointsToAlarm: !Ref StatusEvalPeriods
+      Threshold: 0
+      ComparisonOperator: "GreaterThanThreshold"
+      TreatMissingData: "notBreaching"
+      ActionsEnabled: true
+      AlarmActions: [ !Ref AlertsTopic ]
+      OKActions:    [ !Ref AlertsTopic ]
+
+Outputs:
+  AlertsTopicArn:
+    Description: SNS topic ARN for alarm notifications
+    Value: !Ref AlertsTopic
+  ClbLatencyAlarmName:
+    Description: Name of the CLB latency alarm
+    Value: !Ref ClbLatencyAlarm
+  ClbBackend5xxAlarmName:
+    Description: Name of the CLB backend 5XX alarm
+    Value: !Ref ClbBackend5xxAlarm
+  ClbUnhealthyHostAlarmName:
+    Description: Name of the CLB unhealthy host alarm
+    Value: !Ref ClbUnhealthyHostAlarm
+  EC2CPUAlarm1Name:
+    Description: EC2 CPU alarm (instance #1)
+    Value: !Ref EC2CPUAlarm1
+  EC2StatusAlarm1Name:
+    Description: EC2 StatusCheckFailed alarm (instance #1)
+    Value: !Ref EC2StatusAlarm1
+  EC2CPUAlarm2Name:
+    Condition: HasInstance2
+    Description: EC2 CPU alarm (instance #2)
+    Value: !Ref EC2CPUAlarm2
+  EC2StatusAlarm2Name:
+    Condition: HasInstance2
+    Description: EC2 StatusCheckFailed alarm (instance #2)
+    Value: !Ref EC2StatusAlarm2
+  EC2CPUAlarm3Name:
+    Condition: HasInstance3
+    Description: EC2 CPU alarm (instance #3)
+    Value: !Ref EC2CPUAlarm3
+  EC2StatusAlarm3Name:
+    Condition: HasInstance3
+    Description: EC2 StatusCheckFailed alarm (instance #3)
+    Value: !Ref EC2StatusAlarm3
