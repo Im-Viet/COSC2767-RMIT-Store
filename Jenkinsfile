@@ -16,7 +16,7 @@ pipeline {
     string(name: 'BACKEND_REPO', defaultValue: 'rmit-store/backend', description: 'ECR repo path for backend')
     string(name: 'FRONTEND_REPO', defaultValue: 'rmit-store/frontend', description: 'ECR repo path for frontend')
     booleanParam(name: 'APPLY_MANIFESTS', defaultValue: true, description: 'Apply k8s/<DEV_NAMESPACE> manifests (first time only)')
-    booleanParam(name: 'SEED_DB', defaultValue: true, description: 'Run seed job on DEV after deploy')
+    booleanParam(name: 'SEED_DB', defaultValue: false, description: 'Run seed job on DEV after deploy')
     string(name: 'DEV_HOSTNAME',  defaultValue: 'auto', description: 'Dev hostname (auto -> dev.<lb-host>.nip.io)')
     string(name: 'PROD_HOSTNAME', defaultValue: 'auto', description: 'Prod hostname (auto -> prod.<lb-host>.nip.io)')
   }
